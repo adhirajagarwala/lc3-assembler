@@ -1,0 +1,6 @@
+; Multiple labels
+.ORIG x3000
+FIRST ADD R1, R1, #1
+SECOND ADD R1, R1, #1
+THIRD ADD R1, R1, #1
+.END

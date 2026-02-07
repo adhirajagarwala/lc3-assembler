@@ -1,0 +1,9 @@
+[package]
+name = "lc3-assembler"
+version = "0.1.0"
+edition = "2021"
+description = "An LC-3 assembler written in Rust"
+
+[dependencies]
+
+[dev-dependencies]

@@ -1,0 +1,10 @@
+; Trap aliases
+.ORIG x3000
+GETC
+OUT
+PUTS
+IN
+PUTSP
+HALT
+MSG .STRINGZ "OK"
+.END

@@ -1,0 +1,6 @@
+; All directives
+.ORIG x3000
+DATA .FILL #1
+BUFFER .BLKW #5
+MSG .STRINGZ "HI"
+.END

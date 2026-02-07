@@ -1,0 +1,5 @@
+; Large .BLKW
+.ORIG x3000
+.BLKW #20
+AFTER ADD R1, R1, #1
+.END

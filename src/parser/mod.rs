@@ -4,6 +4,8 @@ use crate::error::{AsmError, ErrorKind, Span};
 use crate::lexer::token::{Token, TokenKind};
 use ast::{Instruction, LineContent, SourceLine};
 
+// TODO-HIGH: Refactor parse_content() match statement (30+ arms) into a dispatch table or macro system
+
 pub struct ParseResult {
     pub lines: Vec<SourceLine>,
     pub errors: Vec<AsmError>,
@@ -143,6 +145,7 @@ fn line_span(tokens: &[Token], line_number: usize) -> Span {
 }
 
 fn parse_content(tokens: &[&Token]) -> Result<LineContent, AsmError> {
+    // TODO-HIGH: Replace all 30+ match arms below with macro-generated dispatch table
     let first = tokens[0];
     match &first.kind {
         TokenKind::OpAdd => parse_add(tokens),
@@ -181,7 +184,12 @@ fn parse_content(tokens: &[&Token]) -> Result<LineContent, AsmError> {
     }
 }
 
+// TODO-HIGH: Consolidate parse_add, parse_and into single macro for reg-reg-or-imm instructions
+// TODO-HIGH: Consolidate parse_ld, parse_ldi, parse_lea, parse_st, parse_sti into parse_reg_label macro
+// TODO-HIGH: Consolidate parse_ldr, parse_str into parse_reg_reg_imm macro
 fn parse_add(tokens: &[&Token]) -> Result<LineContent, AsmError> {
+    // TODO-HIGH: Extract repetitive error construction (Err(AsmError { kind, message, span }))
+    // into a helper function or builder to reduce ~500 lines of boilerplate across parser
     if tokens.len() < 6 {
         return Err(AsmError {
             kind: ErrorKind::TooFewOperands,
@@ -460,6 +468,7 @@ fn parse_reg_label<F>(tokens: &[&Token], name: &str, f: F) -> Result<LineContent
 where
     F: Fn(u8, String) -> LineContent,
 {
+    // TODO-MED: Consider merging parse_reg_label and parse_reg_reg_imm into unified generic helper
     if tokens.len() < 4 {
         return Err(AsmError {
             kind: ErrorKind::TooFewOperands,
@@ -509,6 +518,7 @@ fn ensure_no_operands(tokens: &[&Token], content: LineContent, name: &str) -> Re
     Ok(content)
 }
 
+// TODO-MED: These expect_* and ensure_* helpers could be consolidated with a validator trait/macro
 fn ensure_no_extra(tokens: &[&Token], expected_len: usize) -> Result<(), AsmError> {
     if tokens.len() > expected_len {
         return Err(AsmError {

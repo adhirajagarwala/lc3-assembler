@@ -14,6 +14,7 @@ pub struct LexResult {
 }
 
 pub fn tokenize(source: &str) -> LexResult {
+    // TODO-MED: Consider builder pattern for Token creation to avoid manual Span construction
     let mut cursor = Cursor::new(source);
     let mut tokens = Vec::new();
     let mut errors = Vec::new();
@@ -128,6 +129,7 @@ fn lex_comment(
 }
 
 fn lex_string(cursor: &mut Cursor, sb: usize, sl: usize, sc: usize) -> Result<Option<Token>, AsmError> {
+    // TODO-MED: Extract repetitive escape sequence handling (n,r,t,\\,",0 cases) into helper map
     cursor.advance();
     let mut processed = String::new();
     let mut raw = String::from("\"");

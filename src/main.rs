@@ -22,6 +22,7 @@ fn main() {
         eprintln!("{}", err);
     }
 
+    // TODO-LOW: Chain error collection for cleaner error reporting (consider Result<T, Vec<Error>>)
     let parsed = parse_lines(&lexed.tokens);
     for err in &parsed.errors {
         eprintln!("{}", err);

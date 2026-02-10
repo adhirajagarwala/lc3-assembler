@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+// TODO-LOW: Consider using BTreeMap instead of HashMap + Vec for automatic ordering without duplication
 #[derive(Debug, Clone)]
 pub struct SymbolTable {
     map: HashMap<String, u16>,

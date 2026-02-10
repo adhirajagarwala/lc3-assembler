@@ -12,6 +12,8 @@ pub struct FirstPassResult {
 }
 
 pub fn first_pass(lines: &[SourceLine]) -> FirstPassResult {
+    // TODO-MED: Extract repetitive error construction (Err(AsmError { kind, message, span }))
+    // into helper function to reduce boilerplate throughout this module
     let mut symbol_table = SymbolTable::new();
     let mut errors = Vec::new();
     let mut location_counter: Option<u16> = None;
@@ -20,6 +22,7 @@ pub fn first_pass(lines: &[SourceLine]) -> FirstPassResult {
     let mut found_end = false;
 
     for line in lines {
+        // TODO-MED: Replace boolean state flags (found_orig, found_end) with enum state machine
         if !found_orig {
             match &line.content {
                 LineContent::Orig(addr) => {

@@ -58,6 +58,7 @@ pub fn first_pass(lines: &[SourceLine]) -> FirstPassResult {
             record_label(&mut symbol_table, label, lc, line.span, &mut errors);
         }
 
+        // TODO-MED: Move word counting logic into a method on LineContent enum
         let words: u32 = match &line.content {
             LineContent::Empty => 0,
             LineContent::Orig(_) => {

@@ -76,6 +76,7 @@ impl BrFlags {
 
 impl std::fmt::Display for BrFlags {
     // TODO-MED: Replace loop-based flag formatting with more idiomatic string concatenation
+    // TODO-LOW: Use single write! macro instead of multiple writes
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.n {
             write!(f, "n")?;

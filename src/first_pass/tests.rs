@@ -4,6 +4,7 @@ mod tests {
     use crate::lexer::tokenize;
     use crate::parser::parse_lines;
 
+    // TODO-LOW: Create test macro - most tests follow: run_first_pass(input) -> assert_eq(output)
     fn run_first_pass(input: &str) -> crate::first_pass::FirstPassResult {
         let lexed = tokenize(input);
         assert!(lexed.errors.is_empty(), "Lexer errors: {:?}", lexed.errors);

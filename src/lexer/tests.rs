@@ -4,6 +4,8 @@ mod tests {
     use crate::lexer::token::{BrFlags, TokenKind};
     use crate::lexer::tokenize;
 
+    // TODO-LOW: Create test macro - most tests follow: lex_ok(input) -> assert_eq(output)
+    // TODO-LOW: Consolidate test helpers (lex_ok, lex_errors) - they follow the same pattern
     fn lex_ok(input: &str) -> Vec<TokenKind> {
         let result = tokenize(input);
         assert!(

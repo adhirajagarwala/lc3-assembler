@@ -4,6 +4,8 @@ mod tests {
     use crate::parser::ast::{Instruction, LineContent};
     use crate::parser::parse_lines;
 
+    // TODO-LOW: Create test macro - most tests follow: parse_ok(input) -> assert_eq(output)
+    // TODO-LOW: Consolidate test helpers (parse_ok, parse_errors) - they follow the same pattern
     fn parse_ok(input: &str) -> Vec<crate::parser::ast::SourceLine> {
         let lexed = tokenize(input);
         assert!(lexed.errors.is_empty(), "Lexer errors: {:?}", lexed.errors);

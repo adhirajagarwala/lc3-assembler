@@ -13,6 +13,8 @@ pub struct AsmError {
     pub span: Span,
 }
 
+// TODO-MED: Add impl for AsmError with builder/constructor methods to reduce boilerplate throughout codebase
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum ErrorKind {
     UnterminatedString,

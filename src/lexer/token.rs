@@ -75,6 +75,7 @@ impl BrFlags {
 }
 
 impl std::fmt::Display for BrFlags {
+    // TODO-MED: Replace loop-based flag formatting with more idiomatic string concatenation
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.n {
             write!(f, "n")?;
@@ -91,6 +92,7 @@ impl std::fmt::Display for BrFlags {
 
 impl TokenKind {
     pub fn is_instruction_or_directive(&self) -> bool {
+        // TODO-MED: Replace 25-item matches!() with a more maintainable approach (static set or trait)
         matches!(
             self,
             TokenKind::OpAdd

@@ -4,6 +4,7 @@ use lc3_assembler::first_pass::first_pass;
 use lc3_assembler::lexer::tokenize;
 use lc3_assembler::parser::parse_lines;
 
+// TODO-HIGH: Add integration tests for encoder once second_pass is implemented
 fn run_pipeline(path: &str) -> lc3_assembler::first_pass::FirstPassResult {
     let source = fs::read_to_string(path).expect("Failed to read test program");
     let lexed = tokenize(&source);

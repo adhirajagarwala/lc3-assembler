@@ -16,6 +16,7 @@ fn run_pipeline(path: &str) -> lc3_assembler::first_pass::FirstPassResult {
     result
 }
 
+// TODO-LOW: Consider parameterized test macro to reduce duplication across integration tests
 #[test]
 fn hello_program() {
     let result = run_pipeline("tests/test_programs/hello.asm");

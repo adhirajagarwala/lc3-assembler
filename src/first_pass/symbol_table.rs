@@ -47,6 +47,7 @@ impl SymbolTable {
         }
     }
 
+    // TODO-LOW: iter() uses map[label] which can panic - use .get() or .expect()
     pub fn iter(&self) -> impl Iterator<Item = (&str, u16)> {
         self.order.iter().map(move |label| (label.as_str(), self.map[label]))
     }

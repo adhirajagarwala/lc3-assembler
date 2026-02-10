@@ -77,6 +77,7 @@ fn lex_token(cursor: &mut Cursor) -> Result<Option<Token>, AsmError> {
     }
 }
 
+// TODO-LOW: skip_whitespace used once - inline or move to Cursor impl
 fn skip_whitespace(cursor: &mut Cursor) {
     while matches!(cursor.peek(), Some(' ' | '\t')) {
         cursor.advance();
@@ -327,6 +328,7 @@ fn lex_word(cursor: &mut Cursor, sb: usize, sl: usize, sc: usize) -> Result<Opti
         }
     }
 
+    // TODO-LOW: Consider using static HashMap or phf_map for opcode lookup instead of match
     let kind = match upper.as_str() {
         "ADD" => TokenKind::OpAdd,
         "AND" => TokenKind::OpAnd,
@@ -343,6 +345,7 @@ fn lex_word(cursor: &mut Cursor, sb: usize, sl: usize, sc: usize) -> Result<Opti
         "JSRR" => TokenKind::OpJsrr,
         "TRAP" => TokenKind::OpTrap,
         "RTI" => TokenKind::OpRti,
+        // TODO-LOW: Parse BrFlags from string instead of hardcoding all 8 variants
         "BR" => TokenKind::OpBr(BrFlags::new(true, true, true)),
         "BRN" => TokenKind::OpBr(BrFlags::new(true, false, false)),
         "BRZ" => TokenKind::OpBr(BrFlags::new(false, true, false)),
@@ -359,6 +362,7 @@ fn lex_word(cursor: &mut Cursor, sb: usize, sl: usize, sc: usize) -> Result<Opti
         "PUTSP" => TokenKind::PseudoPutsp,
         "HALT" => TokenKind::PseudoHalt,
         _ => {
+            // TODO-MED: Extract two's complement conversion into helper function
             // HEX LITERAL: Parse as u32 first, then handle 16-bit two's complement
             if upper.starts_with('X')
                 && upper.len() > 1
@@ -396,6 +400,7 @@ fn lex_word(cursor: &mut Cursor, sb: usize, sl: usize, sc: usize) -> Result<Opti
                 }
             }
 
+            // TODO-MED: Extract two's complement conversion into helper function
             // BINARY LITERAL: Same treatment
             if upper.starts_with('B')
                 && upper.len() > 1

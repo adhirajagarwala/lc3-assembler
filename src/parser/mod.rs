@@ -61,6 +61,7 @@ fn process_line(
     let mut label: Option<String> = None;
     let content_tokens: &[&Token];
 
+    // TODO-MED: Consolidate two early returns with identical SourceLine Empty construction
     match &first.kind {
         TokenKind::Label(name) => {
             if filtered.len() == 1 {
@@ -163,6 +164,7 @@ fn parse_content(tokens: &[&Token]) -> Result<LineContent, AsmError> {
         TokenKind::OpJsr => parse_jsr(tokens),
         TokenKind::OpJsrr => parse_jsrr(tokens),
         TokenKind::OpTrap => parse_trap(tokens),
+        // TODO-LOW: Group RTI/RET/GETC/OUT/PUTS/IN/PUTSP/HALT into single handler
         TokenKind::OpRti => ensure_no_operands(tokens, LineContent::Instruction(Instruction::Rti), "RTI"),
         TokenKind::PseudoRet => ensure_no_operands(tokens, LineContent::Instruction(Instruction::Ret), "RET"),
         TokenKind::PseudoGetc => ensure_no_operands(tokens, LineContent::Instruction(Instruction::Getc), "GETC"),
@@ -518,6 +520,7 @@ fn ensure_no_operands(tokens: &[&Token], content: LineContent, name: &str) -> Re
     Ok(content)
 }
 
+// TODO-MED: Consolidate validation helpers with a builder pattern or macro
 // TODO-MED: These expect_* and ensure_* helpers could be consolidated with a validator trait/macro
 fn ensure_no_extra(tokens: &[&Token], expected_len: usize) -> Result<(), AsmError> {
     if tokens.len() > expected_len {
@@ -578,6 +581,7 @@ fn expect_label(tokens: &[&Token], idx: usize, message: &str) -> Result<String, 
     })
 }
 
+// TODO-MED: Replace these token conversion helpers with a trait or macro to reduce duplication
 fn token_to_i32(token: &Token) -> Option<i32> {
     match &token.kind {
         TokenKind::NumDecimal(v) => Some(*v),

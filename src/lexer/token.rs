@@ -75,55 +75,32 @@ impl BrFlags {
 }
 
 impl std::fmt::Display for BrFlags {
-    // TODO-MED: Replace loop-based flag formatting with more idiomatic string concatenation
-    // TODO-LOW: Use single write! macro instead of multiple writes
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.n {
-            write!(f, "n")?;
-        }
-        if self.z {
-            write!(f, "z")?;
-        }
-        if self.p {
-            write!(f, "p")?;
-        }
-        Ok(())
+        let flags = format!(
+            "{}{}{}",
+            if self.n { "n" } else { "" },
+            if self.z { "z" } else { "" },
+            if self.p { "p" } else { "" }
+        );
+        write!(f, "{}", flags)
     }
 }
 
 impl TokenKind {
     pub fn is_instruction_or_directive(&self) -> bool {
-        // TODO-MED: Replace 25-item matches!() with a more maintainable approach (static set or trait)
+        use TokenKind::*;
         matches!(
             self,
-            TokenKind::OpAdd
-                | TokenKind::OpAnd
-                | TokenKind::OpNot
-                | TokenKind::OpBr(_)
-                | TokenKind::OpJmp
-                | TokenKind::OpJsr
-                | TokenKind::OpJsrr
-                | TokenKind::OpLd
-                | TokenKind::OpLdi
-                | TokenKind::OpLdr
-                | TokenKind::OpLea
-                | TokenKind::OpSt
-                | TokenKind::OpSti
-                | TokenKind::OpStr
-                | TokenKind::OpTrap
-                | TokenKind::OpRti
-                | TokenKind::PseudoRet
-                | TokenKind::PseudoGetc
-                | TokenKind::PseudoOut
-                | TokenKind::PseudoPuts
-                | TokenKind::PseudoIn
-                | TokenKind::PseudoPutsp
-                | TokenKind::PseudoHalt
-                | TokenKind::DirOrig
-                | TokenKind::DirEnd
-                | TokenKind::DirFill
-                | TokenKind::DirBlkw
-                | TokenKind::DirStringz
+            // Operate instructions
+            OpAdd | OpAnd | OpNot | OpBr(_) |
+            // Control flow
+            OpJmp | OpJsr | OpJsrr | OpRti |
+            // Data movement
+            OpLd | OpLdi | OpLdr | OpLea | OpSt | OpSti | OpStr |
+            // Trap & pseudos
+            OpTrap | PseudoRet | PseudoGetc | PseudoOut | PseudoPuts | PseudoIn | PseudoPutsp | PseudoHalt |
+            // Directives
+            DirOrig | DirEnd | DirFill | DirBlkw | DirStringz
         )
     }
 }

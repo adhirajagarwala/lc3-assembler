@@ -1,10 +1,10 @@
+#[macro_use]
+mod macros;
 pub mod ast;
 
 use crate::error::{AsmError, ErrorKind, Span};
 use crate::lexer::token::{Token, TokenKind};
 use ast::{Instruction, LineContent, SourceLine};
-
-// TODO-HIGH: Refactor parse_content() match statement (30+ arms) into a dispatch table or macro system
 
 pub struct ParseResult {
     pub lines: Vec<SourceLine>,
@@ -61,7 +61,6 @@ fn process_line(
     let mut label: Option<String> = None;
     let content_tokens: &[&Token];
 
-    // TODO-MED: Consolidate two early returns with identical SourceLine Empty construction
     match &first.kind {
         TokenKind::Label(name) => {
             if filtered.len() == 1 {
@@ -146,38 +145,58 @@ fn line_span(tokens: &[Token], line_number: usize) -> Span {
 }
 
 fn parse_content(tokens: &[&Token]) -> Result<LineContent, AsmError> {
-    // TODO-HIGH: Replace all 30+ match arms below with macro-generated dispatch table
     let first = tokens[0];
+
+    // Use macros to generate parsers inline
     match &first.kind {
-        TokenKind::OpAdd => parse_add(tokens),
-        TokenKind::OpAnd => parse_and(tokens),
+        // Operate instructions - consolidated with macros
+        TokenKind::OpAdd => parse_reg_reg_or_imm!("ADD",
+            |dr, sr1, sr2| Instruction::AddReg { dr, sr1, sr2 },
+            |dr, sr1, imm5| Instruction::AddImm { dr, sr1, imm5 })(tokens),
+
+        TokenKind::OpAnd => parse_reg_reg_or_imm!("AND",
+            |dr, sr1, sr2| Instruction::AndReg { dr, sr1, sr2 },
+            |dr, sr1, imm5| Instruction::AndImm { dr, sr1, imm5 })(tokens),
+
         TokenKind::OpNot => parse_not(tokens),
         TokenKind::OpBr(flags) => parse_br(tokens, *flags),
-        TokenKind::OpLd => parse_ld(tokens),
-        TokenKind::OpLdi => parse_ldi(tokens),
-        TokenKind::OpLdr => parse_ldr(tokens),
-        TokenKind::OpLea => parse_lea(tokens),
-        TokenKind::OpSt => parse_st(tokens),
-        TokenKind::OpSti => parse_sti(tokens),
-        TokenKind::OpStr => parse_str(tokens),
-        TokenKind::OpJmp => parse_jmp(tokens),
-        TokenKind::OpJsr => parse_jsr(tokens),
-        TokenKind::OpJsrr => parse_jsrr(tokens),
+
+        // Data movement - PC offset (consolidated with macros)
+        TokenKind::OpLd => parse_reg_label!("LD", |dr, label| Instruction::Ld { dr, label })(tokens),
+        TokenKind::OpLdi => parse_reg_label!("LDI", |dr, label| Instruction::Ldi { dr, label })(tokens),
+        TokenKind::OpLea => parse_reg_label!("LEA", |dr, label| Instruction::Lea { dr, label })(tokens),
+        TokenKind::OpSt => parse_reg_label!("ST", |sr, label| Instruction::St { sr, label })(tokens),
+        TokenKind::OpSti => parse_reg_label!("STI", |sr, label| Instruction::Sti { sr, label })(tokens),
+
+        // Data movement - base+offset (consolidated with macros)
+        TokenKind::OpLdr => parse_reg_reg_imm!("LDR", |dr, base_r, offset6| Instruction::Ldr { dr, base_r, offset6 })(tokens),
+        TokenKind::OpStr => parse_reg_reg_imm!("STR", |sr, base_r, offset6| Instruction::Str { sr, base_r, offset6 })(tokens),
+
+        // Control flow (consolidated with macros)
+        TokenKind::OpJmp => parse_single_reg!("JMP", |base_r| Instruction::Jmp { base_r })(tokens),
+        TokenKind::OpJsr => parse_single_label!("JSR", |label| Instruction::Jsr { label })(tokens),
+        TokenKind::OpJsrr => parse_single_reg!("JSRR", |base_r| Instruction::Jsrr { base_r })(tokens),
+
+        // Trap
         TokenKind::OpTrap => parse_trap(tokens),
-        // TODO-LOW: Group RTI/RET/GETC/OUT/PUTS/IN/PUTSP/HALT into single handler
-        TokenKind::OpRti => ensure_no_operands(tokens, LineContent::Instruction(Instruction::Rti), "RTI"),
-        TokenKind::PseudoRet => ensure_no_operands(tokens, LineContent::Instruction(Instruction::Ret), "RET"),
-        TokenKind::PseudoGetc => ensure_no_operands(tokens, LineContent::Instruction(Instruction::Getc), "GETC"),
-        TokenKind::PseudoOut => ensure_no_operands(tokens, LineContent::Instruction(Instruction::Out), "OUT"),
-        TokenKind::PseudoPuts => ensure_no_operands(tokens, LineContent::Instruction(Instruction::Puts), "PUTS"),
-        TokenKind::PseudoIn => ensure_no_operands(tokens, LineContent::Instruction(Instruction::In), "IN"),
-        TokenKind::PseudoPutsp => ensure_no_operands(tokens, LineContent::Instruction(Instruction::Putsp), "PUTSP"),
-        TokenKind::PseudoHalt => ensure_no_operands(tokens, LineContent::Instruction(Instruction::Halt), "HALT"),
+
+        // No-operand instructions (consolidated with macros)
+        TokenKind::OpRti => parse_no_operands!("RTI", Instruction::Rti)(tokens),
+        TokenKind::PseudoRet => parse_no_operands!("RET", Instruction::Ret)(tokens),
+        TokenKind::PseudoGetc => parse_no_operands!("GETC", Instruction::Getc)(tokens),
+        TokenKind::PseudoOut => parse_no_operands!("OUT", Instruction::Out)(tokens),
+        TokenKind::PseudoPuts => parse_no_operands!("PUTS", Instruction::Puts)(tokens),
+        TokenKind::PseudoIn => parse_no_operands!("IN", Instruction::In)(tokens),
+        TokenKind::PseudoPutsp => parse_no_operands!("PUTSP", Instruction::Putsp)(tokens),
+        TokenKind::PseudoHalt => parse_no_operands!("HALT", Instruction::Halt)(tokens),
+
+        // Directives
         TokenKind::DirOrig => parse_orig(tokens),
-        TokenKind::DirEnd => ensure_no_operands(tokens, LineContent::End, ".END"),
+        TokenKind::DirEnd => parse_end(tokens),
         TokenKind::DirFill => parse_fill(tokens),
         TokenKind::DirBlkw => parse_blkw(tokens),
         TokenKind::DirStringz => parse_stringz(tokens),
+
         _ => Err(AsmError {
             kind: ErrorKind::UnexpectedToken,
             message: "Unexpected token in line".into(),
@@ -186,72 +205,7 @@ fn parse_content(tokens: &[&Token]) -> Result<LineContent, AsmError> {
     }
 }
 
-// TODO-HIGH: Consolidate parse_add, parse_and into single macro for reg-reg-or-imm instructions
-// TODO-HIGH: Consolidate parse_ld, parse_ldi, parse_lea, parse_st, parse_sti into parse_reg_label macro
-// TODO-HIGH: Consolidate parse_ldr, parse_str into parse_reg_reg_imm macro
-fn parse_add(tokens: &[&Token]) -> Result<LineContent, AsmError> {
-    // TODO-HIGH: Extract repetitive error construction (Err(AsmError { kind, message, span }))
-    // into a helper function or builder to reduce ~500 lines of boilerplate across parser
-    if tokens.len() < 6 {
-        return Err(AsmError {
-            kind: ErrorKind::TooFewOperands,
-            message: "ADD requires 3 operands: ADD DR, SR1, SR2/imm5".into(),
-            span: tokens[0].span,
-        });
-    }
-    expect_comma(tokens, 2, "Expected comma after first operand")?;
-    expect_comma(tokens, 4, "Expected comma after second operand")?;
-    let dr = expect_register(tokens, 1, "ADD first operand must be a register (R0-R7)")?;
-    let sr1 = expect_register(tokens, 3, "ADD second operand must be a register (R0-R7)")?;
-    if let Some(sr2) = token_to_register(tokens[5]) {
-        ensure_no_extra(tokens, 6)?;
-        Ok(LineContent::Instruction(Instruction::AddReg { dr, sr1, sr2 }))
-    } else if let Some(imm) = token_to_i32(tokens[5]) {
-        ensure_no_extra(tokens, 6)?;
-        Ok(LineContent::Instruction(Instruction::AddImm {
-            dr,
-            sr1,
-            imm5: imm as i16,
-        }))
-    } else {
-        Err(AsmError {
-            kind: ErrorKind::InvalidOperandType,
-            message: "ADD third operand must be a register (R0-R7) or immediate (#n)".into(),
-            span: tokens[5].span,
-        })
-    }
-}
-
-fn parse_and(tokens: &[&Token]) -> Result<LineContent, AsmError> {
-    if tokens.len() < 6 {
-        return Err(AsmError {
-            kind: ErrorKind::TooFewOperands,
-            message: "AND requires 3 operands: AND DR, SR1, SR2/imm5".into(),
-            span: tokens[0].span,
-        });
-    }
-    expect_comma(tokens, 2, "Expected comma after first operand")?;
-    expect_comma(tokens, 4, "Expected comma after second operand")?;
-    let dr = expect_register(tokens, 1, "AND first operand must be a register (R0-R7)")?;
-    let sr1 = expect_register(tokens, 3, "AND second operand must be a register (R0-R7)")?;
-    if let Some(sr2) = token_to_register(tokens[5]) {
-        ensure_no_extra(tokens, 6)?;
-        Ok(LineContent::Instruction(Instruction::AndReg { dr, sr1, sr2 }))
-    } else if let Some(imm) = token_to_i32(tokens[5]) {
-        ensure_no_extra(tokens, 6)?;
-        Ok(LineContent::Instruction(Instruction::AndImm {
-            dr,
-            sr1,
-            imm5: imm as i16,
-        }))
-    } else {
-        Err(AsmError {
-            kind: ErrorKind::InvalidOperandType,
-            message: "AND third operand must be a register (R0-R7) or immediate (#n)".into(),
-            span: tokens[5].span,
-        })
-    }
-}
+// Only need custom parsing for unique instructions
 
 fn parse_not(tokens: &[&Token]) -> Result<LineContent, AsmError> {
     if tokens.len() < 4 {
@@ -279,87 +233,6 @@ fn parse_br(tokens: &[&Token], flags: crate::lexer::token::BrFlags) -> Result<Li
     let label = expect_label(tokens, 1, "BR requires a label operand")?;
     ensure_no_extra(tokens, 2)?;
     Ok(LineContent::Instruction(Instruction::Br { flags, label }))
-}
-
-fn parse_ld(tokens: &[&Token]) -> Result<LineContent, AsmError> {
-    parse_reg_label(tokens, "LD", |dr, label| {
-        LineContent::Instruction(Instruction::Ld { dr, label })
-    })
-}
-
-fn parse_ldi(tokens: &[&Token]) -> Result<LineContent, AsmError> {
-    parse_reg_label(tokens, "LDI", |dr, label| {
-        LineContent::Instruction(Instruction::Ldi { dr, label })
-    })
-}
-
-fn parse_lea(tokens: &[&Token]) -> Result<LineContent, AsmError> {
-    parse_reg_label(tokens, "LEA", |dr, label| {
-        LineContent::Instruction(Instruction::Lea { dr, label })
-    })
-}
-
-fn parse_st(tokens: &[&Token]) -> Result<LineContent, AsmError> {
-    parse_reg_label(tokens, "ST", |sr, label| {
-        LineContent::Instruction(Instruction::St { sr, label })
-    })
-}
-
-fn parse_sti(tokens: &[&Token]) -> Result<LineContent, AsmError> {
-    parse_reg_label(tokens, "STI", |sr, label| {
-        LineContent::Instruction(Instruction::Sti { sr, label })
-    })
-}
-
-fn parse_ldr(tokens: &[&Token]) -> Result<LineContent, AsmError> {
-    parse_reg_reg_imm(tokens, "LDR", |dr, base_r, offset6| {
-        LineContent::Instruction(Instruction::Ldr { dr, base_r, offset6 })
-    })
-}
-
-fn parse_str(tokens: &[&Token]) -> Result<LineContent, AsmError> {
-    parse_reg_reg_imm(tokens, "STR", |sr, base_r, offset6| {
-        LineContent::Instruction(Instruction::Str { sr, base_r, offset6 })
-    })
-}
-
-fn parse_jmp(tokens: &[&Token]) -> Result<LineContent, AsmError> {
-    if tokens.len() < 2 {
-        return Err(AsmError {
-            kind: ErrorKind::TooFewOperands,
-            message: "JMP requires 1 operand: JMP BaseR".into(),
-            span: tokens[0].span,
-        });
-    }
-    let base_r = expect_register(tokens, 1, "JMP operand must be a register (R0-R7)")?;
-    ensure_no_extra(tokens, 2)?;
-    Ok(LineContent::Instruction(Instruction::Jmp { base_r }))
-}
-
-fn parse_jsr(tokens: &[&Token]) -> Result<LineContent, AsmError> {
-    if tokens.len() < 2 {
-        return Err(AsmError {
-            kind: ErrorKind::TooFewOperands,
-            message: "JSR requires 1 operand: JSR LABEL".into(),
-            span: tokens[0].span,
-        });
-    }
-    let label = expect_label(tokens, 1, "JSR requires a label operand")?;
-    ensure_no_extra(tokens, 2)?;
-    Ok(LineContent::Instruction(Instruction::Jsr { label }))
-}
-
-fn parse_jsrr(tokens: &[&Token]) -> Result<LineContent, AsmError> {
-    if tokens.len() < 2 {
-        return Err(AsmError {
-            kind: ErrorKind::TooFewOperands,
-            message: "JSRR requires 1 operand: JSRR BaseR".into(),
-            span: tokens[0].span,
-        });
-    }
-    let base_r = expect_register(tokens, 1, "JSRR operand must be a register (R0-R7)")?;
-    ensure_no_extra(tokens, 2)?;
-    Ok(LineContent::Instruction(Instruction::Jsrr { base_r }))
 }
 
 fn parse_trap(tokens: &[&Token]) -> Result<LineContent, AsmError> {
@@ -403,6 +276,17 @@ fn parse_orig(tokens: &[&Token]) -> Result<LineContent, AsmError> {
     }
     ensure_no_extra(tokens, 2)?;
     Ok(LineContent::Orig(value as u16))
+}
+
+fn parse_end(tokens: &[&Token]) -> Result<LineContent, AsmError> {
+    if tokens.len() > 1 {
+        return Err(AsmError {
+            kind: ErrorKind::TooManyOperands,
+            message: ".END takes no operands".into(),
+            span: tokens[1].span,
+        });
+    }
+    Ok(LineContent::End)
 }
 
 fn parse_fill(tokens: &[&Token]) -> Result<LineContent, AsmError> {
@@ -466,63 +350,8 @@ fn parse_stringz(tokens: &[&Token]) -> Result<LineContent, AsmError> {
     }
 }
 
-fn parse_reg_label<F>(tokens: &[&Token], name: &str, f: F) -> Result<LineContent, AsmError>
-where
-    F: Fn(u8, String) -> LineContent,
-{
-    // TODO-MED: Consider merging parse_reg_label and parse_reg_reg_imm into unified generic helper
-    if tokens.len() < 4 {
-        return Err(AsmError {
-            kind: ErrorKind::TooFewOperands,
-            message: format!("{} requires 2 operands: {} DR, LABEL", name, name),
-            span: tokens[0].span,
-        });
-    }
-    expect_comma(tokens, 2, "Expected comma after first operand")?;
-    let reg = expect_register(tokens, 1, &format!("{} first operand must be a register (R0-R7)", name))?;
-    let label = expect_label(tokens, 3, &format!("{} requires a label operand", name))?;
-    ensure_no_extra(tokens, 4)?;
-    Ok(f(reg, label))
-}
-
-fn parse_reg_reg_imm<F>(tokens: &[&Token], name: &str, f: F) -> Result<LineContent, AsmError>
-where
-    F: Fn(u8, u8, i16) -> LineContent,
-{
-    if tokens.len() < 6 {
-        return Err(AsmError {
-            kind: ErrorKind::TooFewOperands,
-            message: format!("{} requires 3 operands: {} DR, BaseR, #offset6", name, name),
-            span: tokens[0].span,
-        });
-    }
-    expect_comma(tokens, 2, "Expected comma after first operand")?;
-    expect_comma(tokens, 4, "Expected comma after second operand")?;
-    let r1 = expect_register(tokens, 1, &format!("{} first operand must be a register (R0-R7)", name))?;
-    let r2 = expect_register(tokens, 3, &format!("{} second operand must be a register (R0-R7)", name))?;
-    let value = token_to_i32(tokens[5]).ok_or_else(|| AsmError {
-        kind: ErrorKind::InvalidOperandType,
-        message: format!("{} third operand must be an immediate (#n)", name),
-        span: tokens[5].span,
-    })?;
-    ensure_no_extra(tokens, 6)?;
-    Ok(f(r1, r2, value as i16))
-}
-
-fn ensure_no_operands(tokens: &[&Token], content: LineContent, name: &str) -> Result<LineContent, AsmError> {
-    if tokens.len() > 1 {
-        return Err(AsmError {
-            kind: ErrorKind::TooManyOperands,
-            message: format!("{} takes no operands", name),
-            span: tokens[1].span,
-        });
-    }
-    Ok(content)
-}
-
-// TODO-MED: Consolidate validation helpers with a builder pattern or macro
-// TODO-MED: These expect_* and ensure_* helpers could be consolidated with a validator trait/macro
-fn ensure_no_extra(tokens: &[&Token], expected_len: usize) -> Result<(), AsmError> {
+// Helper functions - now public for macro access
+pub fn ensure_no_extra(tokens: &[&Token], expected_len: usize) -> Result<(), AsmError> {
     if tokens.len() > expected_len {
         return Err(AsmError {
             kind: ErrorKind::UnexpectedToken,
@@ -533,7 +362,7 @@ fn ensure_no_extra(tokens: &[&Token], expected_len: usize) -> Result<(), AsmErro
     Ok(())
 }
 
-fn expect_comma(tokens: &[&Token], idx: usize, message: &str) -> Result<(), AsmError> {
+pub fn expect_comma(tokens: &[&Token], idx: usize, message: &str) -> Result<(), AsmError> {
     if tokens.len() <= idx {
         return Err(AsmError {
             kind: ErrorKind::ExpectedComma,
@@ -551,7 +380,7 @@ fn expect_comma(tokens: &[&Token], idx: usize, message: &str) -> Result<(), AsmE
     }
 }
 
-fn expect_register(tokens: &[&Token], idx: usize, message: &str) -> Result<u8, AsmError> {
+pub fn expect_register(tokens: &[&Token], idx: usize, message: &str) -> Result<u8, AsmError> {
     if tokens.len() <= idx {
         return Err(AsmError {
             kind: ErrorKind::ExpectedRegister,
@@ -566,7 +395,7 @@ fn expect_register(tokens: &[&Token], idx: usize, message: &str) -> Result<u8, A
     })
 }
 
-fn expect_label(tokens: &[&Token], idx: usize, message: &str) -> Result<String, AsmError> {
+pub fn expect_label(tokens: &[&Token], idx: usize, message: &str) -> Result<String, AsmError> {
     if tokens.len() <= idx {
         return Err(AsmError {
             kind: ErrorKind::ExpectedOperand,
@@ -581,8 +410,7 @@ fn expect_label(tokens: &[&Token], idx: usize, message: &str) -> Result<String, 
     })
 }
 
-// TODO-MED: Replace these token conversion helpers with a trait or macro to reduce duplication
-fn token_to_i32(token: &Token) -> Option<i32> {
+pub fn token_to_i32(token: &Token) -> Option<i32> {
     match &token.kind {
         TokenKind::NumDecimal(v) => Some(*v),
         TokenKind::NumHex(v) => Some(*v),
@@ -591,14 +419,14 @@ fn token_to_i32(token: &Token) -> Option<i32> {
     }
 }
 
-fn token_to_register(token: &Token) -> Option<u8> {
+pub fn token_to_register(token: &Token) -> Option<u8> {
     match &token.kind {
         TokenKind::Register(r) => Some(*r),
         _ => None,
     }
 }
 
-fn token_to_label(token: &Token) -> Option<String> {
+pub fn token_to_label(token: &Token) -> Option<String> {
     match &token.kind {
         TokenKind::Label(s) => Some(s.clone()),
         _ => None,

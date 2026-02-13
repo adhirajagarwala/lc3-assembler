@@ -13,6 +13,30 @@ pub struct LexResult {
     pub errors: Vec<AsmError>,
 }
 
+/// Convert a 16-bit unsigned value to i32 using two's complement representation
+#[inline]
+fn u16_to_twos_complement(v: u32) -> i32 {
+    if v > 0x7FFF {
+        (v as i32) - 0x10000
+    } else {
+        v as i32
+    }
+}
+
+/// Process an escape sequence character and return the actual character
+#[inline]
+fn process_escape_char(esc: char) -> Option<char> {
+    match esc {
+        'n' => Some('\n'),
+        'r' => Some('\r'),
+        't' => Some('\t'),
+        '\\' => Some('\\'),
+        '"' => Some('"'),
+        '0' => Some('\0'),
+        _ => None,
+    }
+}
+
 pub fn tokenize(source: &str) -> LexResult {
     // TODO-MED: Consider builder pattern for Token creation to avoid manual Span construction
     let mut cursor = Cursor::new(source);
@@ -43,7 +67,11 @@ pub fn tokenize(source: &str) -> LexResult {
 }
 
 fn lex_token(cursor: &mut Cursor) -> Result<Option<Token>, AsmError> {
-    skip_whitespace(cursor);
+    // Skip whitespace (inlined)
+    while matches!(cursor.peek(), Some(' ' | '\t')) {
+        cursor.advance();
+    }
+
     if cursor.is_at_end() {
         return Ok(None);
     }
@@ -74,13 +102,6 @@ fn lex_token(cursor: &mut Cursor) -> Result<Option<Token>, AsmError> {
                 span: cursor.make_span(sb, sl, sc),
             })
         }
-    }
-}
-
-// TODO-LOW: skip_whitespace used once - inline or move to Cursor impl
-fn skip_whitespace(cursor: &mut Cursor) {
-    while matches!(cursor.peek(), Some(' ' | '\t')) {
-        cursor.advance();
     }
 }
 
@@ -130,7 +151,6 @@ fn lex_comment(
 }
 
 fn lex_string(cursor: &mut Cursor, sb: usize, sl: usize, sc: usize) -> Result<Option<Token>, AsmError> {
-    // TODO-MED: Extract repetitive escape sequence handling (n,r,t,\\,",0 cases) into helper map
     cursor.advance();
     let mut processed = String::new();
     let mut raw = String::from("\"");
@@ -171,41 +191,16 @@ fn lex_string(cursor: &mut Cursor, sb: usize, sl: usize, sc: usize) -> Result<Op
             }
 
             let esc = cursor.peek().unwrap();
-            match esc {
-                'n' => {
-                    processed.push('\n');
+            match process_escape_char(esc) {
+                Some(ch) => {
+                    processed.push(ch);
                     cursor.advance();
-                    raw.push('n');
+                    raw.push(esc);
                 }
-                'r' => {
-                    processed.push('\r');
-                    cursor.advance();
-                    raw.push('r');
-                }
-                't' => {
-                    processed.push('\t');
-                    cursor.advance();
-                    raw.push('t');
-                }
-                '\\' => {
-                    processed.push('\\');
-                    cursor.advance();
-                    raw.push('\\');
-                }
-                '"' => {
-                    processed.push('"');
-                    cursor.advance();
-                    raw.push('"');
-                }
-                '0' => {
-                    processed.push('\0');
-                    cursor.advance();
-                    raw.push('0');
-                }
-                other => {
+                None => {
                     return Err(AsmError {
                         kind: ErrorKind::InvalidEscapeSequence,
-                        message: format!("Invalid escape sequence: \\{}", other),
+                        message: format!("Invalid escape sequence: \\{}", esc),
                         span: cursor.make_span(sb, sl, sc),
                     });
                 }
@@ -362,7 +357,6 @@ fn lex_word(cursor: &mut Cursor, sb: usize, sl: usize, sc: usize) -> Result<Opti
         "PUTSP" => TokenKind::PseudoPutsp,
         "HALT" => TokenKind::PseudoHalt,
         _ => {
-            // TODO-MED: Extract two's complement conversion into helper function
             // HEX LITERAL: Parse as u32 first, then handle 16-bit two's complement
             if upper.starts_with('X')
                 && upper.len() > 1
@@ -371,12 +365,7 @@ fn lex_word(cursor: &mut Cursor, sb: usize, sl: usize, sc: usize) -> Result<Opti
                 let hex_part = &upper[1..];
                 match u32::from_str_radix(hex_part, 16) {
                     Ok(v) if v <= 0xFFFF => {
-                        // Treat as 16-bit two's complement
-                        let value = if v > 0x7FFF {
-                            (v as i32) - 0x10000
-                        } else {
-                            v as i32
-                        };
+                        let value = u16_to_twos_complement(v);
                         return Ok(Some(Token {
                             kind: TokenKind::NumHex(value),
                             lexeme: word,
@@ -400,7 +389,6 @@ fn lex_word(cursor: &mut Cursor, sb: usize, sl: usize, sc: usize) -> Result<Opti
                 }
             }
 
-            // TODO-MED: Extract two's complement conversion into helper function
             // BINARY LITERAL: Same treatment
             if upper.starts_with('B')
                 && upper.len() > 1
@@ -409,11 +397,7 @@ fn lex_word(cursor: &mut Cursor, sb: usize, sl: usize, sc: usize) -> Result<Opti
                 let bin_part = &upper[1..];
                 match u32::from_str_radix(bin_part, 2) {
                     Ok(v) if v <= 0xFFFF => {
-                        let value = if v > 0x7FFF {
-                            (v as i32) - 0x10000
-                        } else {
-                            v as i32
-                        };
+                        let value = u16_to_twos_complement(v);
                         return Ok(Some(Token {
                             kind: TokenKind::NumBinary(value),
                             lexeme: word,

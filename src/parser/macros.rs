@@ -1,4 +1,22 @@
+//! # Parser Macros
+//!
+//! Declarative macros for generating instruction parsing functions.
+//!
+//! These macros eliminate ~150 lines of repetitive parsing code by generating
+//! parsers for similar instruction patterns. Each macro validates operand counts,
+//! checks for proper comma placement, and constructs the appropriate AST node.
+//!
+//! ## Benefits
+//!
+//! - **Consistency**: All instructions with the same pattern are parsed identically
+//! - **Maintainability**: Fixing a bug in the pattern fixes it for all instructions
+//! - **Readability**: The main parser file is much cleaner and easier to understand
+
 /// Macro to generate parsers for reg-reg-or-imm instructions (ADD, AND)
+///
+/// These instructions can operate in two modes:
+/// - Register mode: `ADD R1, R2, R3` (add R2 and R3, store in R1)
+/// - Immediate mode: `ADD R1, R2, #5` (add R2 and 5, store in R1)
 macro_rules! parse_reg_reg_or_imm {
     ($name:expr, $reg_variant:expr, $imm_variant:expr) => {
         |tokens: &[&$crate::lexer::token::Token]| -> Result<$crate::parser::ast::LineContent, $crate::error::AsmError> {

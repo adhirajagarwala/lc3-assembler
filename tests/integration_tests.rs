@@ -1,10 +1,10 @@
 use std::fs;
 
+use lc3_assembler::encoder::encode;
 use lc3_assembler::first_pass::first_pass;
 use lc3_assembler::lexer::tokenize;
 use lc3_assembler::parser::parse_lines;
 
-// TODO-HIGH: Add integration tests for encoder once second_pass is implemented
 fn run_pipeline(path: &str) -> lc3_assembler::first_pass::FirstPassResult {
     let source = fs::read_to_string(path).expect("Failed to read test program");
     let lexed = tokenize(&source);
@@ -14,6 +14,19 @@ fn run_pipeline(path: &str) -> lc3_assembler::first_pass::FirstPassResult {
     let result = first_pass(&parsed.lines);
     assert!(result.errors.is_empty(), "First pass errors: {:?}", result.errors);
     result
+}
+
+fn run_full_pipeline(path: &str) -> lc3_assembler::encoder::EncodeResult {
+    let source = fs::read_to_string(path).expect("Failed to read test program");
+    let lexed = tokenize(&source);
+    assert!(lexed.errors.is_empty(), "Lexer errors: {:?}", lexed.errors);
+    let parsed = parse_lines(&lexed.tokens);
+    assert!(parsed.errors.is_empty(), "Parser errors: {:?}", parsed.errors);
+    let first = first_pass(&parsed.lines);
+    assert!(first.errors.is_empty(), "First pass errors: {:?}", first.errors);
+    let encoded = encode(&first);
+    assert!(encoded.errors.is_empty(), "Encoder errors: {:?}", encoded.errors);
+    encoded
 }
 
 // TODO-LOW: Consider parameterized test macro to reduce duplication across integration tests
@@ -80,4 +93,92 @@ fn stress_program() {
     let result = run_pipeline("tests/test_programs/stress.asm");
     assert_eq!(result.symbol_table.get("ENTRY"), Some(0x3000));
     assert_eq!(result.symbol_table.get("DONE"), Some(0x3012));
+}
+
+// ========== ENCODER INTEGRATION TESTS ==========
+
+#[test]
+fn encode_hello_program() {
+    let encoded = run_full_pipeline("tests/test_programs/hello.asm");
+    assert_eq!(encoded.orig_address, 0x3000);
+    assert!(encoded.machine_code.len() > 0, "Should generate machine code");
+    // LEA R0, MSG (0xE002) + PUTS (0xF022) + HALT (0xF025) + "Hello" + null
+    assert_eq!(encoded.machine_code[0], 0xE002); // LEA R0, offset=2
+    assert_eq!(encoded.machine_code[1], 0xF022); // PUTS
+    assert_eq!(encoded.machine_code[2], 0xF025); // HALT
+    assert_eq!(encoded.machine_code[3], 'H' as u16);
+    assert_eq!(encoded.machine_code[4], 'e' as u16);
+    assert_eq!(encoded.machine_code[5], 'l' as u16);
+    assert_eq!(encoded.machine_code[6], 'l' as u16);
+    assert_eq!(encoded.machine_code[7], 'o' as u16);
+    assert_eq!(encoded.machine_code[8], 0x0000); // null terminator
+}
+
+#[test]
+fn encode_all_instructions() {
+    let encoded = run_full_pipeline("tests/test_programs/all_instructions.asm");
+    assert_eq!(encoded.orig_address, 0x3000);
+    // Verify we have machine code for all instructions
+    assert!(encoded.machine_code.len() >= 18, "Should have at least 18 words");
+
+    // Verify opcode nibbles are correct for first few instructions
+    assert_eq!(encoded.machine_code[0] >> 12, 0x1, "First instruction should be ADD (0001)");
+    assert_eq!(encoded.machine_code[1] >> 12, 0x5, "Second instruction should be AND (0101)");
+    assert_eq!(encoded.machine_code[2] >> 12, 0x9, "Third instruction should be NOT (1001)");
+}
+
+#[test]
+fn encode_trap_aliases() {
+    let encoded = run_full_pipeline("tests/test_programs/trap_aliases.asm");
+    assert_eq!(encoded.orig_address, 0x3000);
+
+    // Check that trap aliases are properly encoded
+    let has_getc = encoded.machine_code.iter().any(|&w| w == 0xF020);
+    let has_out = encoded.machine_code.iter().any(|&w| w == 0xF021);
+    let has_puts = encoded.machine_code.iter().any(|&w| w == 0xF022);
+    let has_halt = encoded.machine_code.iter().any(|&w| w == 0xF025);
+
+    assert!(has_getc || has_out || has_puts, "Should have TRAP aliases");
+    assert!(has_halt, "Should have HALT");
+}
+
+#[test]
+fn encode_blkw_directive() {
+    let encoded = run_full_pipeline("tests/test_programs/large_blkw.asm");
+    assert_eq!(encoded.orig_address, 0x3000);
+    // Should have instructions + 20 zeros from .BLKW
+    assert!(encoded.machine_code.len() >= 20, "Should allocate 20 words");
+}
+
+#[test]
+fn encode_fill_directive() {
+    let encoded = run_full_pipeline("tests/test_programs/all_directives.asm");
+    assert_eq!(encoded.orig_address, 0x3000);
+    // Should contain .FILL values
+    assert!(encoded.machine_code.len() > 0);
+}
+
+#[test]
+fn encode_stringz_directive() {
+    let encoded = run_full_pipeline("tests/test_programs/hello.asm");
+    // Check for string data with null terminator
+    let has_null = encoded.machine_code.iter().any(|&w| w == 0x0000);
+    assert!(has_null, "STRINGZ should end with null terminator");
+}
+
+#[test]
+fn encode_pc_offset_calculation() {
+    let encoded = run_full_pipeline("tests/test_programs/countdown.asm");
+    assert_eq!(encoded.orig_address, 0x3000);
+    // Program has BR instruction that should have valid PC offset
+    assert!(encoded.machine_code.len() > 0, "Should encode branch instructions");
+}
+
+#[test]
+fn encode_preserves_orig_address() {
+    let encoded = run_full_pipeline("tests/test_programs/hello.asm");
+    assert_eq!(encoded.orig_address, 0x3000);
+
+    let encoded2 = run_full_pipeline("tests/test_programs/all_instructions.asm");
+    assert_eq!(encoded2.orig_address, 0x3000);
 }

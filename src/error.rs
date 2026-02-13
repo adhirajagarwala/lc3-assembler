@@ -13,7 +13,61 @@ pub struct AsmError {
     pub span: Span,
 }
 
-// TODO-MED: Add impl for AsmError with builder/constructor methods to reduce boilerplate throughout codebase
+impl AsmError {
+    /// Create a new AsmError
+    pub fn new(kind: ErrorKind, message: impl Into<String>, span: Span) -> Self {
+        Self {
+            kind,
+            message: message.into(),
+            span,
+        }
+    }
+
+    /// Builder-style constructor for common error patterns
+    pub fn too_few_operands(message: impl Into<String>, span: Span) -> Self {
+        Self::new(ErrorKind::TooFewOperands, message, span)
+    }
+
+    pub fn too_many_operands(message: impl Into<String>, span: Span) -> Self {
+        Self::new(ErrorKind::TooManyOperands, message, span)
+    }
+
+    pub fn invalid_operand_type(message: impl Into<String>, span: Span) -> Self {
+        Self::new(ErrorKind::InvalidOperandType, message, span)
+    }
+
+    pub fn expected_register(message: impl Into<String>, span: Span) -> Self {
+        Self::new(ErrorKind::ExpectedRegister, message, span)
+    }
+
+    pub fn expected_comma(message: impl Into<String>, span: Span) -> Self {
+        Self::new(ErrorKind::ExpectedComma, message, span)
+    }
+
+    pub fn expected_operand(message: impl Into<String>, span: Span) -> Self {
+        Self::new(ErrorKind::ExpectedOperand, message, span)
+    }
+
+    pub fn unexpected_token(message: impl Into<String>, span: Span) -> Self {
+        Self::new(ErrorKind::UnexpectedToken, message, span)
+    }
+
+    pub fn undefined_label(label: &str, span: Span) -> Self {
+        Self::new(
+            ErrorKind::UndefinedLabel,
+            format!("Undefined label '{}'", label),
+            span,
+        )
+    }
+
+    pub fn duplicate_label(label: &str, first_addr: u16, span: Span) -> Self {
+        Self::new(
+            ErrorKind::DuplicateLabel,
+            format!("Duplicate label '{}' (first defined at x{:04X})", label, first_addr),
+            span,
+        )
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ErrorKind {
@@ -43,6 +97,8 @@ pub enum ErrorKind {
     InvalidBlkwCount,
     AddressOverflow,
     LabelIsReservedWord,
+    UndefinedLabel,
+    OffsetOutOfRange,
 }
 
 impl std::fmt::Display for AsmError {

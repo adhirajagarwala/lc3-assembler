@@ -1,10 +1,28 @@
+//! # Cursor
+//!
+//! Provides character-by-character navigation through source code with position tracking.
+//!
+//! The cursor maintains both character position and byte offset to support proper
+//! Unicode handling and accurate error reporting.
+
 use crate::error::Span;
 
+/// A cursor for iterating through source code characters
+///
+/// Tracks position in multiple ways:
+/// - Character index (for Unicode correctness)
+/// - Byte offset (for span creation)
+/// - Line and column numbers (for error messages)
 pub struct Cursor {
+    /// All characters in the source
     chars: Vec<char>,
+    /// Current character index
     pos: usize,
+    /// Current line number (1-indexed)
     line: usize,
+    /// Current column number (1-indexed)
     col: usize,
+    /// Current byte offset in original string
     byte_offset: usize,
 }
 
@@ -27,6 +45,11 @@ impl Cursor {
         self.chars.get(self.pos + 1).copied()
     }
 
+    /// Advance to the next character and return it
+    ///
+    /// Updates line/column tracking:
+    /// - '\n' increments line, resets column to 1
+    /// - Other chars increment column
     pub fn advance(&mut self) -> Option<char> {
         if let Some(ch) = self.chars.get(self.pos).copied() {
             self.pos += 1;

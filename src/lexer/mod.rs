@@ -1,3 +1,24 @@
+//! # LC-3 Lexer
+//!
+//! Tokenizes LC-3 assembly source code into a stream of tokens.
+//!
+//! ## Features
+//!
+//! - **Numeric Literals**: Supports decimal (#10, #-5), hexadecimal (x3000, xFFFF),
+//!   and binary (b1010, b1111) notation
+//! - **String Literals**: Handles escape sequences (\n, \r, \t, \\, \", \0)
+//! - **Comments**: Line comments starting with semicolon
+//! - **Instructions**: All LC-3 opcodes and pseudo-ops
+//! - **Directives**: .ORIG, .FILL, .BLKW, .STRINGZ, .END
+//! - **Branch Variants**: Dynamic parsing of BR, BRn, BRz, BRp, BRnz, BRnp, etc.
+//!
+//! ## Two's Complement Handling
+//!
+//! Hexadecimal and binary literals are interpreted as 16-bit values and converted
+//! to signed integers using two's complement:
+//! - `x0000` to `x7FFF` → 0 to 32767 (positive)
+//! - `x8000` to `xFFFF` → -32768 to -1 (negative)
+
 pub mod cursor;
 pub mod token;
 
@@ -340,15 +361,6 @@ fn lex_word(cursor: &mut Cursor, sb: usize, sl: usize, sc: usize) -> Result<Opti
         "JSRR" => TokenKind::OpJsrr,
         "TRAP" => TokenKind::OpTrap,
         "RTI" => TokenKind::OpRti,
-        // TODO-LOW: Parse BrFlags from string instead of hardcoding all 8 variants
-        "BR" => TokenKind::OpBr(BrFlags::new(true, true, true)),
-        "BRN" => TokenKind::OpBr(BrFlags::new(true, false, false)),
-        "BRZ" => TokenKind::OpBr(BrFlags::new(false, true, false)),
-        "BRP" => TokenKind::OpBr(BrFlags::new(false, false, true)),
-        "BRNZ" => TokenKind::OpBr(BrFlags::new(true, true, false)),
-        "BRNP" => TokenKind::OpBr(BrFlags::new(true, false, true)),
-        "BRZP" => TokenKind::OpBr(BrFlags::new(false, true, true)),
-        "BRNZP" => TokenKind::OpBr(BrFlags::new(true, true, true)),
         "RET" => TokenKind::PseudoRet,
         "GETC" => TokenKind::PseudoGetc,
         "OUT" => TokenKind::PseudoOut,
@@ -357,6 +369,14 @@ fn lex_word(cursor: &mut Cursor, sb: usize, sl: usize, sc: usize) -> Result<Opti
         "PUTSP" => TokenKind::PseudoPutsp,
         "HALT" => TokenKind::PseudoHalt,
         _ => {
+            // Try to parse as BR instruction with flags
+            if let Some(flags) = BrFlags::from_str(&upper) {
+                return Ok(Some(Token {
+                    kind: TokenKind::OpBr(flags),
+                    lexeme: word,
+                    span: cursor.make_span(sb, sl, sc),
+                }));
+            }
             // HEX LITERAL: Parse as u32 first, then handle 16-bit two's complement
             if upper.starts_with('X')
                 && upper.len() > 1

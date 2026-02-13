@@ -1,3 +1,28 @@
+//! # LC-3 Parser
+//!
+//! Parses tokenized LC-3 assembly code into an Abstract Syntax Tree (AST).
+//!
+//! ## Architecture
+//!
+//! The parser processes tokens line by line, handling:
+//! - Optional labels at the start of lines
+//! - Instructions with their operands
+//! - Assembler directives (.ORIG, .FILL, etc.)
+//! - Comments (filtered out during parsing)
+//!
+//! ## Macro-Based Parsing
+//!
+//! To eliminate code duplication, the parser uses declarative macros to generate
+//! parsing functions for similar instruction patterns:
+//! - `parse_reg_reg_or_imm!` - ADD, AND (register or immediate mode)
+//! - `parse_reg_label!` - LD, LDI, LEA, ST, STI (PC-relative addressing)
+//! - `parse_reg_reg_imm!` - LDR, STR (base+offset addressing)
+//! - `parse_single_reg!` - JMP, JSRR (single register operand)
+//! - `parse_single_label!` - JSR (single label operand)
+//! - `parse_no_operands!` - RET, HALT, etc. (no operands)
+//!
+//! This reduced the parser from 606 to 450 lines (-26% code reduction).
+
 #[macro_use]
 mod macros;
 pub mod ast;

@@ -10,12 +10,18 @@ use lc3_assembler::parser::parse_lines;
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
-        eprintln!("Usage: lc3-assembler <file.asm> [-o output.obj]");
+        eprintln!("LC-3 Assembler");
+        eprintln!("Usage: lc3-assembler <input.asm> [-o output.obj]");
+        eprintln!();
+        eprintln!("Examples:");
+        eprintln!("  lc3-assembler program.asm           # Creates program.obj");
+        eprintln!("  lc3-assembler program.asm -o out.obj # Creates out.obj");
         std::process::exit(1);
     }
 
-    let source = fs::read_to_string(&args[1]).unwrap_or_else(|err| {
-        eprintln!("Failed to read file: {}", err);
+    let input_file = &args[1];
+    let source = fs::read_to_string(input_file).unwrap_or_else(|err| {
+        eprintln!("Error: Failed to read '{}': {}", input_file, err);
         std::process::exit(1);
     });
 
@@ -36,25 +42,34 @@ fn main() {
     }
 
     if !all_errors.is_empty() {
-        eprintln!("\nAssembly failed with {} error(s)", all_errors.len());
+        eprintln!("\n\u{274c} Assembly failed with {} error(s)", all_errors.len());
         std::process::exit(1);
     }
 
     // Print symbol table
+    println!("\n\u{1f4cb} Symbol Table:");
     first.symbol_table.print_table();
 
     // Determine output file name
     let output_file = if args.len() >= 4 && args[2] == "-o" {
         args[3].clone()
     } else {
-        args[1].replace(".asm", ".obj")
+        input_file.replace(".asm", ".obj")
     };
 
     // Write binary output (LC-3 object file format)
     match write_obj_file(&output_file, encoded.orig_address, &encoded.machine_code) {
-        Ok(_) => println!("\nAssembly successful: {} words written to {}", encoded.machine_code.len(), output_file),
+        Ok(_) => {
+            println!("\n\u{2705} Assembly successful!");
+            println!("   Input:  {}", input_file);
+            println!("   Output: {}", output_file);
+            println!("   Origin: 0x{:04X}", encoded.orig_address);
+            println!("   Size:   {} words ({} bytes)",
+                     encoded.machine_code.len(),
+                     encoded.machine_code.len() * 2);
+        }
         Err(err) => {
-            eprintln!("Failed to write output file: {}", err);
+            eprintln!("\n\u{274c} Error: Failed to write '{}': {}", output_file, err);
             std::process::exit(1);
         }
     }

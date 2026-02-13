@@ -1,3 +1,25 @@
+//! # First Pass
+//!
+//! Builds the symbol table and validates program structure.
+//!
+//! ## Responsibilities
+//!
+//! The first pass performs several critical tasks:
+//!
+//! 1. **Symbol Table Construction**: Records all labels and their addresses
+//! 2. **Address Calculation**: Tracks the location counter as it processes each line
+//! 3. **Structure Validation**: Ensures .ORIG comes first, .END is present, no duplicates
+//! 4. **Overflow Detection**: Checks that the program doesn't exceed 16-bit address space
+//!
+//! ## State Machine
+//!
+//! The first pass uses a state machine with three states:
+//! - `WaitingForOrig`: Initial state, expecting .ORIG directive
+//! - `Processing`: Normal processing after .ORIG
+//! - `AfterEnd`: After .END directive (ignores subsequent lines)
+//!
+//! This replaces error-prone boolean flags and makes the logic clearer.
+
 pub mod symbol_table;
 
 use crate::error::{AsmError, ErrorKind, Span};
@@ -85,17 +107,18 @@ pub fn first_pass(lines: &[SourceLine]) -> FirstPassResult {
 
         let words = line.content.word_count();
 
+        // Check for address overflow (LC-3 only has 16-bit address space)
         let new_lc = (lc as u32) + words;
         if new_lc > 0x10000 {
-            errors.push(AsmError {
-                kind: ErrorKind::AddressOverflow,
-                message: format!(
+            errors.push(AsmError::new(
+                ErrorKind::AddressOverflow,
+                format!(
                     "Address overflow: location counter would exceed 0xFFFF (at x{:04X} + {} words)",
                     lc, words
                 ),
-                span: line.span,
-            });
-            location_counter = Some(0xFFFF);
+                line.span,
+            ));
+            location_counter = Some(0xFFFF); // Cap at max address
         } else {
             location_counter = Some(new_lc as u16);
         }

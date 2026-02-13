@@ -21,6 +21,22 @@ pub enum LineContent {
     Instruction(Instruction),
 }
 
+impl LineContent {
+    /// Calculate how many words this line content will occupy in memory
+    pub fn word_count(&self) -> u32 {
+        match self {
+            LineContent::Empty => 0,
+            LineContent::Orig(_) => 0,
+            LineContent::End => 0,
+            LineContent::FillImmediate(_) => 1,
+            LineContent::FillLabel(_) => 1,
+            LineContent::Blkw(n) => *n as u32,
+            LineContent::Stringz(s) => (s.len() as u32) + 1, // +1 for null terminator
+            LineContent::Instruction(_) => 1,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Instruction {
     AddReg { dr: u8, sr1: u8, sr2: u8 },

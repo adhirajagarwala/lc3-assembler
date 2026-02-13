@@ -11,45 +11,48 @@ pub struct FirstPassResult {
     pub errors: Vec<AsmError>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum AssemblerState {
+    WaitingForOrig,
+    Processing,
+    AfterEnd,
+}
+
 pub fn first_pass(lines: &[SourceLine]) -> FirstPassResult {
-    // TODO-MED: Extract repetitive error construction (Err(AsmError { kind, message, span }))
-    // into helper function to reduce boilerplate throughout this module
     let mut symbol_table = SymbolTable::new();
     let mut errors = Vec::new();
     let mut location_counter: Option<u16> = None;
     let mut orig_address: u16 = 0;
-    let mut found_orig = false;
-    let mut found_end = false;
+    let mut state = AssemblerState::WaitingForOrig;
 
     for line in lines {
-        // TODO-MED: Replace boolean state flags (found_orig, found_end) with enum state machine
-        if !found_orig {
-            match &line.content {
-                LineContent::Orig(addr) => {
-                    found_orig = true;
-                    orig_address = *addr;
-                    location_counter = Some(*addr);
-                    if let Some(ref label) = line.label {
-                        record_label(&mut symbol_table, label, *addr, line.span, &mut errors);
+        match state {
+            AssemblerState::WaitingForOrig => {
+                match &line.content {
+                    LineContent::Orig(addr) => {
+                        state = AssemblerState::Processing;
+                        orig_address = *addr;
+                        location_counter = Some(*addr);
+                        if let Some(ref label) = line.label {
+                            record_label(&mut symbol_table, label, *addr, line.span, &mut errors);
+                        }
+                        continue;
                     }
-                    continue;
-                }
-                LineContent::Empty => continue,
-                _ => {
-                    errors.push(AsmError {
-                        kind: ErrorKind::MissingOrig,
-                        message: "Expected .ORIG before any instructions".into(),
-                        span: line.span,
-                    });
-                    found_orig = true;
-                    orig_address = 0x3000;
-                    location_counter = Some(0x3000);
+                    LineContent::Empty => continue,
+                    _ => {
+                        errors.push(AsmError::new(
+                            ErrorKind::MissingOrig,
+                            "Expected .ORIG before any instructions",
+                            line.span,
+                        ));
+                        state = AssemblerState::Processing;
+                        orig_address = 0x3000;
+                        location_counter = Some(0x3000);
+                    }
                 }
             }
-        }
-
-        if found_end {
-            continue;
+            AssemblerState::AfterEnd => continue,
+            AssemblerState::Processing => {}
         }
 
         let lc = location_counter.unwrap();
@@ -58,36 +61,29 @@ pub fn first_pass(lines: &[SourceLine]) -> FirstPassResult {
             record_label(&mut symbol_table, label, lc, line.span, &mut errors);
         }
 
-        // TODO-MED: Move word counting logic into a method on LineContent enum
-        let words: u32 = match &line.content {
-            LineContent::Empty => 0,
+        // Handle special cases before word counting
+        match &line.content {
             LineContent::Orig(_) => {
-                errors.push(AsmError {
-                    kind: ErrorKind::MultipleOrig,
-                    message: "Multiple .ORIG directives are not supported".into(),
-                    span: line.span,
-                });
-                0
+                errors.push(AsmError::new(
+                    ErrorKind::MultipleOrig,
+                    "Multiple .ORIG directives are not supported",
+                    line.span,
+                ));
             }
             LineContent::End => {
-                found_end = true;
-                0
+                state = AssemblerState::AfterEnd;
             }
-            LineContent::FillImmediate(_) => 1,
-            LineContent::FillLabel(_) => 1,
-            LineContent::Blkw(n) => {
-                if *n == 0 {
-                    errors.push(AsmError {
-                        kind: ErrorKind::InvalidBlkwCount,
-                        message: ".BLKW count must be positive".into(),
-                        span: line.span,
-                    });
-                }
-                *n as u32
+            LineContent::Blkw(n) if *n == 0 => {
+                errors.push(AsmError::new(
+                    ErrorKind::InvalidBlkwCount,
+                    ".BLKW count must be positive",
+                    line.span,
+                ));
             }
-            LineContent::Stringz(s) => (s.len() as u32) + 1,
-            LineContent::Instruction(_) => 1,
-        };
+            _ => {}
+        }
+
+        let words = line.content.word_count();
 
         let new_lc = (lc as u32) + words;
         if new_lc > 0x10000 {
@@ -105,30 +101,20 @@ pub fn first_pass(lines: &[SourceLine]) -> FirstPassResult {
         }
     }
 
-    if !found_orig {
-        errors.push(AsmError {
-            kind: ErrorKind::MissingOrig,
-            message: "No .ORIG directive found".into(),
-            span: Span {
-                start: 0,
-                end: 0,
-                line: 1,
-                col: 1,
-            },
-        });
+    if state == AssemblerState::WaitingForOrig {
+        errors.push(AsmError::new(
+            ErrorKind::MissingOrig,
+            "No .ORIG directive found",
+            Span { start: 0, end: 0, line: 1, col: 1 },
+        ));
     }
 
-    if !found_end {
-        errors.push(AsmError {
-            kind: ErrorKind::MissingEnd,
-            message: "No .END directive found".into(),
-            span: Span {
-                start: 0,
-                end: 0,
-                line: 1,
-                col: 1,
-            },
-        });
+    if state != AssemblerState::AfterEnd {
+        errors.push(AsmError::new(
+            ErrorKind::MissingEnd,
+            "No .END directive found",
+            Span { start: 0, end: 0, line: 1, col: 1 },
+        ));
     }
 
     FirstPassResult {
@@ -147,15 +133,8 @@ fn record_label(
     errors: &mut Vec<AsmError>,
 ) {
     if table.contains(label) {
-        errors.push(AsmError {
-            kind: ErrorKind::DuplicateLabel,
-            message: format!(
-                "Duplicate label '{}' (first defined at x{:04X})",
-                label,
-                table.get(label).unwrap()
-            ),
-            span,
-        });
+        let first_addr = table.get(label).unwrap();
+        errors.push(AsmError::duplicate_label(label, first_addr, span));
     } else {
         table.insert(label.to_string(), address);
     }

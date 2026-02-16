@@ -166,4 +166,6 @@ macro_rules! parse_no_operands {
 }
 
 // Helper functions used by macros (must be public for macro access)
-pub use super::{ensure_no_extra, expect_comma, expect_label, expect_register, token_to_i32, token_to_register};
+pub use super::{
+    ensure_no_extra, expect_comma, expect_label, expect_register, token_to_i32, token_to_register,
+};

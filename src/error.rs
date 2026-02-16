@@ -63,7 +63,10 @@ impl AsmError {
     pub fn duplicate_label(label: &str, first_addr: u16, span: Span) -> Self {
         Self::new(
             ErrorKind::DuplicateLabel,
-            format!("Duplicate label '{}' (first defined at x{:04X})", label, first_addr),
+            format!(
+                "Duplicate label '{}' (first defined at x{:04X})",
+                label, first_addr
+            ),
             span,
         )
     }

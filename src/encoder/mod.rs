@@ -176,7 +176,7 @@ impl<'a> Encoder<'a> {
                 let offset = self.calc_pc_offset(label, 9, span);
                 let nzp =
                     ((flags.n as u16) << 11) | ((flags.z as u16) << 10) | ((flags.p as u16) << 9);
-                (0b0000 << 12) | nzp | offset
+                nzp | offset
             }
 
             // Jump

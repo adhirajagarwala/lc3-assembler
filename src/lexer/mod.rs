@@ -390,7 +390,7 @@ fn lex_word(
         "HALT" => TokenKind::PseudoHalt,
         _ => {
             // Try to parse as BR instruction with flags
-            if let Some(flags) = BrFlags::from_str(&upper) {
+            if let Some(flags) = BrFlags::parse(&upper) {
                 return Ok(Some(Token {
                     kind: TokenKind::OpBr(flags),
                     lexeme: word,

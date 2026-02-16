@@ -7,6 +7,12 @@ pub struct SymbolTable {
     order: Vec<String>,
 }
 
+impl Default for SymbolTable {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SymbolTable {
     pub fn new() -> Self {
         Self {

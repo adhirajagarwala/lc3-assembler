@@ -319,7 +319,7 @@ fn parse_orig(tokens: &[&Token]) -> Result<LineContent, AsmError> {
         message: ".ORIG requires a numeric operand".into(),
         span: tokens[1].span,
     })?;
-    if value < 0 || value > 0xFFFF {
+    if !(0..=0xFFFF).contains(&value) {
         return Err(AsmError {
             kind: ErrorKind::InvalidOrigAddress,
             message: ".ORIG address must be 0x0000-0xFFFF".into(),

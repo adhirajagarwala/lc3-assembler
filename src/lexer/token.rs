@@ -97,7 +97,7 @@ impl BrFlags {
     }
 
     /// Parse BrFlags from a string like "BR", "BRN", "BRNZP", etc.
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         if !s.starts_with("BR") {
             return None;
         }

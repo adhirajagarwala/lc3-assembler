@@ -153,14 +153,14 @@ jobs:
   # Minimum Supported Rust Version (MSRV)
   # ===========================================================================
   msrv:
-    name: MSRV (1.60)
+    name: MSRV (1.70)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Rust 1.60
-        uses: dtolnay/rust-toolchain@1.60.0
+      - name: Install Rust 1.70
+        uses: dtolnay/rust-toolchain@1.70.0
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2

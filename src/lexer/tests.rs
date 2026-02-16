@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod tests {
+mod lexer_tests {
     use crate::error::ErrorKind;
     use crate::lexer::token::{BrFlags, TokenKind};
     use crate::lexer::tokenize;

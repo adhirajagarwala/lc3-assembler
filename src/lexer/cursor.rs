@@ -57,8 +57,6 @@ impl Cursor {
             if ch == '\n' {
                 self.line += 1;
                 self.col = 1;
-            } else if ch == '\r' {
-                self.col += 1;
             } else {
                 self.col += 1;
             }

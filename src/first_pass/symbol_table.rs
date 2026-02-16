@@ -51,7 +51,10 @@ impl SymbolTable {
         self.order.iter().map(move |label| {
             (
                 label.as_str(),
-                self.map.get(label).copied().expect("Label in order but not in map"),
+                self.map
+                    .get(label)
+                    .copied()
+                    .expect("Label in order but not in map"),
             )
         })
     }

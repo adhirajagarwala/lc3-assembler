@@ -1,0 +1,172 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ===========================================================================
+  # Code Quality Checks
+  # ===========================================================================
+  quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt -- --check
+
+      - name: Run Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+  # ===========================================================================
+  # Test Suite (Multiple Platforms)
+  # ===========================================================================
+  test:
+    name: Test Suite
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        rust: [stable, beta]
+        exclude:
+          # Only test beta on Linux to save CI time
+          - os: windows-latest
+            rust: beta
+          - os: macos-latest
+            rust: beta
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust ${{ matrix.rust }}
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build project
+        run: cargo build --verbose
+
+      - name: Run tests
+        run: cargo test --verbose
+
+      - name: Run tests (release mode)
+        run: cargo test --release --verbose
+
+      - name: Run doc tests
+        run: cargo test --doc --verbose
+
+  # ===========================================================================
+  # Code Coverage
+  # ===========================================================================
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-tarpaulin
+        run: cargo install cargo-tarpaulin
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Generate coverage
+        run: cargo tarpaulin --verbose --all-features --workspace --timeout 120 --out xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./cobertura.xml
+          fail_ci_if_error: false
+
+  # ===========================================================================
+  # Security Audit
+  # ===========================================================================
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run cargo-audit
+        uses: actions-rs/audit-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  # ===========================================================================
+  # Documentation Build
+  # ===========================================================================
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build documentation
+        run: cargo doc --no-deps --all-features
+
+      - name: Check for broken links
+        run: cargo doc --no-deps --all-features 2>&1 | grep -i "warning.*broken" && exit 1 || exit 0
+
+  # ===========================================================================
+  # Minimum Supported Rust Version (MSRV)
+  # ===========================================================================
+  msrv:
+    name: MSRV (1.60)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust 1.60
+        uses: dtolnay/rust-toolchain@1.60.0
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build with MSRV
+        run: cargo build --verbose
+
+      - name: Test with MSRV
+        run: cargo test --verbose

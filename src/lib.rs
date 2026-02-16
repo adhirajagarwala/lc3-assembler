@@ -28,8 +28,8 @@
 //! }
 //! ```
 
+pub mod encoder;
 pub mod error;
+pub mod first_pass;
 pub mod lexer;
 pub mod parser;
-pub mod first_pass;
-pub mod encoder;

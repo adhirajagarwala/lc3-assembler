@@ -77,7 +77,12 @@ mod tests {
         let kinds = lex_ok("add Add ADD");
         assert_eq!(
             kinds,
-            vec![TokenKind::OpAdd, TokenKind::OpAdd, TokenKind::OpAdd, TokenKind::Eof]
+            vec![
+                TokenKind::OpAdd,
+                TokenKind::OpAdd,
+                TokenKind::OpAdd,
+                TokenKind::Eof
+            ]
         );
     }
 
@@ -139,7 +144,11 @@ mod tests {
         let kinds = lex_ok("r0 R0");
         assert_eq!(
             kinds,
-            vec![TokenKind::Register(0), TokenKind::Register(0), TokenKind::Eof]
+            vec![
+                TokenKind::Register(0),
+                TokenKind::Register(0),
+                TokenKind::Eof
+            ]
         );
     }
 
@@ -168,7 +177,10 @@ mod tests {
     #[test]
     fn directives_case() {
         let kinds = lex_ok(".orig .Orig");
-        assert_eq!(kinds, vec![TokenKind::DirOrig, TokenKind::DirOrig, TokenKind::Eof]);
+        assert_eq!(
+            kinds,
+            vec![TokenKind::DirOrig, TokenKind::DirOrig, TokenKind::Eof]
+        );
     }
 
     #[test]
@@ -197,12 +209,18 @@ mod tests {
 
     #[test]
     fn decimal_positive() {
-        assert_eq!(lex_ok("#10"), vec![TokenKind::NumDecimal(10), TokenKind::Eof]);
+        assert_eq!(
+            lex_ok("#10"),
+            vec![TokenKind::NumDecimal(10), TokenKind::Eof]
+        );
     }
 
     #[test]
     fn decimal_negative() {
-        assert_eq!(lex_ok("#-5"), vec![TokenKind::NumDecimal(-5), TokenKind::Eof]);
+        assert_eq!(
+            lex_ok("#-5"),
+            vec![TokenKind::NumDecimal(-5), TokenKind::Eof]
+        );
     }
 
     #[test]
@@ -212,24 +230,39 @@ mod tests {
 
     #[test]
     fn decimal_with_plus() {
-        assert_eq!(lex_ok("#+3"), vec![TokenKind::NumDecimal(3), TokenKind::Eof]);
+        assert_eq!(
+            lex_ok("#+3"),
+            vec![TokenKind::NumDecimal(3), TokenKind::Eof]
+        );
     }
 
     #[test]
     fn hex_literal() {
-        assert_eq!(lex_ok("x3000"), vec![TokenKind::NumHex(0x3000), TokenKind::Eof]);
+        assert_eq!(
+            lex_ok("x3000"),
+            vec![TokenKind::NumHex(0x3000), TokenKind::Eof]
+        );
     }
 
     #[test]
     fn hex_case() {
         // 0xABCD > 0x7FFF, so it becomes negative in 16-bit two's complement
-        assert_eq!(lex_ok("xAbCd"), vec![TokenKind::NumHex(-21555), TokenKind::Eof]);
-        assert_eq!(lex_ok("XABCD"), vec![TokenKind::NumHex(-21555), TokenKind::Eof]);
+        assert_eq!(
+            lex_ok("xAbCd"),
+            vec![TokenKind::NumHex(-21555), TokenKind::Eof]
+        );
+        assert_eq!(
+            lex_ok("XABCD"),
+            vec![TokenKind::NumHex(-21555), TokenKind::Eof]
+        );
     }
 
     #[test]
     fn binary_literal() {
-        assert_eq!(lex_ok("b1010"), vec![TokenKind::NumBinary(10), TokenKind::Eof]);
+        assert_eq!(
+            lex_ok("b1010"),
+            vec![TokenKind::NumBinary(10), TokenKind::Eof]
+        );
     }
 
     #[test]
@@ -264,7 +297,10 @@ mod tests {
     fn string_escaped_quote() {
         assert_eq!(
             lex_ok("\"say \\\"hi\\\"\""),
-            vec![TokenKind::StringLiteral("say \"hi\"".into()), TokenKind::Eof]
+            vec![
+                TokenKind::StringLiteral("say \"hi\"".into()),
+                TokenKind::Eof
+            ]
         );
     }
 
@@ -332,7 +368,10 @@ mod tests {
 
     #[test]
     fn b_prefix_ambiguity() {
-        assert_eq!(lex_ok("B0110"), vec![TokenKind::NumBinary(6), TokenKind::Eof]);
+        assert_eq!(
+            lex_ok("B0110"),
+            vec![TokenKind::NumBinary(6), TokenKind::Eof]
+        );
     }
 
     #[test]
@@ -481,6 +520,9 @@ mod tests {
 
     #[test]
     fn string_carriage_return() {
-        assert_eq!(lex_ok("\"a\\rb\"")[0], TokenKind::StringLiteral("a\rb".into()));
+        assert_eq!(
+            lex_ok("\"a\\rb\"")[0],
+            TokenKind::StringLiteral("a\rb".into())
+        );
     }
 }

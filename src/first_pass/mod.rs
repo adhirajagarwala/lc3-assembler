@@ -49,30 +49,28 @@ pub fn first_pass(lines: &[SourceLine]) -> FirstPassResult {
 
     for line in lines {
         match state {
-            AssemblerState::WaitingForOrig => {
-                match &line.content {
-                    LineContent::Orig(addr) => {
-                        state = AssemblerState::Processing;
-                        orig_address = *addr;
-                        location_counter = Some(*addr);
-                        if let Some(ref label) = line.label {
-                            record_label(&mut symbol_table, label, *addr, line.span, &mut errors);
-                        }
-                        continue;
+            AssemblerState::WaitingForOrig => match &line.content {
+                LineContent::Orig(addr) => {
+                    state = AssemblerState::Processing;
+                    orig_address = *addr;
+                    location_counter = Some(*addr);
+                    if let Some(ref label) = line.label {
+                        record_label(&mut symbol_table, label, *addr, line.span, &mut errors);
                     }
-                    LineContent::Empty => continue,
-                    _ => {
-                        errors.push(AsmError::new(
-                            ErrorKind::MissingOrig,
-                            "Expected .ORIG before any instructions",
-                            line.span,
-                        ));
-                        state = AssemblerState::Processing;
-                        orig_address = 0x3000;
-                        location_counter = Some(0x3000);
-                    }
+                    continue;
                 }
-            }
+                LineContent::Empty => continue,
+                _ => {
+                    errors.push(AsmError::new(
+                        ErrorKind::MissingOrig,
+                        "Expected .ORIG before any instructions",
+                        line.span,
+                    ));
+                    state = AssemblerState::Processing;
+                    orig_address = 0x3000;
+                    location_counter = Some(0x3000);
+                }
+            },
             AssemblerState::AfterEnd => continue,
             AssemblerState::Processing => {}
         }
@@ -128,7 +126,12 @@ pub fn first_pass(lines: &[SourceLine]) -> FirstPassResult {
         errors.push(AsmError::new(
             ErrorKind::MissingOrig,
             "No .ORIG directive found",
-            Span { start: 0, end: 0, line: 1, col: 1 },
+            Span {
+                start: 0,
+                end: 0,
+                line: 1,
+                col: 1,
+            },
         ));
     }
 
@@ -136,7 +139,12 @@ pub fn first_pass(lines: &[SourceLine]) -> FirstPassResult {
         errors.push(AsmError::new(
             ErrorKind::MissingEnd,
             "No .END directive found",
-            Span { start: 0, end: 0, line: 1, col: 1 },
+            Span {
+                start: 0,
+                end: 0,
+                line: 1,
+                col: 1,
+            },
         ));
     }
 

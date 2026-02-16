@@ -10,9 +10,17 @@ fn run_pipeline(path: &str) -> lc3_assembler::first_pass::FirstPassResult {
     let lexed = tokenize(&source);
     assert!(lexed.errors.is_empty(), "Lexer errors: {:?}", lexed.errors);
     let parsed = parse_lines(&lexed.tokens);
-    assert!(parsed.errors.is_empty(), "Parser errors: {:?}", parsed.errors);
+    assert!(
+        parsed.errors.is_empty(),
+        "Parser errors: {:?}",
+        parsed.errors
+    );
     let result = first_pass(&parsed.lines);
-    assert!(result.errors.is_empty(), "First pass errors: {:?}", result.errors);
+    assert!(
+        result.errors.is_empty(),
+        "First pass errors: {:?}",
+        result.errors
+    );
     result
 }
 
@@ -21,11 +29,23 @@ fn run_full_pipeline(path: &str) -> lc3_assembler::encoder::EncodeResult {
     let lexed = tokenize(&source);
     assert!(lexed.errors.is_empty(), "Lexer errors: {:?}", lexed.errors);
     let parsed = parse_lines(&lexed.tokens);
-    assert!(parsed.errors.is_empty(), "Parser errors: {:?}", parsed.errors);
+    assert!(
+        parsed.errors.is_empty(),
+        "Parser errors: {:?}",
+        parsed.errors
+    );
     let first = first_pass(&parsed.lines);
-    assert!(first.errors.is_empty(), "First pass errors: {:?}", first.errors);
+    assert!(
+        first.errors.is_empty(),
+        "First pass errors: {:?}",
+        first.errors
+    );
     let encoded = encode(&first);
-    assert!(encoded.errors.is_empty(), "Encoder errors: {:?}", encoded.errors);
+    assert!(
+        encoded.errors.is_empty(),
+        "Encoder errors: {:?}",
+        encoded.errors
+    );
     encoded
 }
 
@@ -101,7 +121,10 @@ fn stress_program() {
 fn encode_hello_program() {
     let encoded = run_full_pipeline("tests/test_programs/hello.asm");
     assert_eq!(encoded.orig_address, 0x3000);
-    assert!(encoded.machine_code.len() > 0, "Should generate machine code");
+    assert!(
+        encoded.machine_code.len() > 0,
+        "Should generate machine code"
+    );
     // LEA R0, MSG (0xE002) + PUTS (0xF022) + HALT (0xF025) + "Hello" + null
     assert_eq!(encoded.machine_code[0], 0xE002); // LEA R0, offset=2
     assert_eq!(encoded.machine_code[1], 0xF022); // PUTS
@@ -119,12 +142,27 @@ fn encode_all_instructions() {
     let encoded = run_full_pipeline("tests/test_programs/all_instructions.asm");
     assert_eq!(encoded.orig_address, 0x3000);
     // Verify we have machine code for all instructions
-    assert!(encoded.machine_code.len() >= 18, "Should have at least 18 words");
+    assert!(
+        encoded.machine_code.len() >= 18,
+        "Should have at least 18 words"
+    );
 
     // Verify opcode nibbles are correct for first few instructions
-    assert_eq!(encoded.machine_code[0] >> 12, 0x1, "First instruction should be ADD (0001)");
-    assert_eq!(encoded.machine_code[1] >> 12, 0x5, "Second instruction should be AND (0101)");
-    assert_eq!(encoded.machine_code[2] >> 12, 0x9, "Third instruction should be NOT (1001)");
+    assert_eq!(
+        encoded.machine_code[0] >> 12,
+        0x1,
+        "First instruction should be ADD (0001)"
+    );
+    assert_eq!(
+        encoded.machine_code[1] >> 12,
+        0x5,
+        "Second instruction should be AND (0101)"
+    );
+    assert_eq!(
+        encoded.machine_code[2] >> 12,
+        0x9,
+        "Third instruction should be NOT (1001)"
+    );
 }
 
 #[test]
@@ -171,7 +209,10 @@ fn encode_pc_offset_calculation() {
     let encoded = run_full_pipeline("tests/test_programs/countdown.asm");
     assert_eq!(encoded.orig_address, 0x3000);
     // Program has BR instruction that should have valid PC offset
-    assert!(encoded.machine_code.len() > 0, "Should encode branch instructions");
+    assert!(
+        encoded.machine_code.len() > 0,
+        "Should encode branch instructions"
+    );
 }
 
 #[test]

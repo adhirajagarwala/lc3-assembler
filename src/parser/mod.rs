@@ -175,32 +175,56 @@ fn parse_content(tokens: &[&Token]) -> Result<LineContent, AsmError> {
     // Use macros to generate parsers inline
     match &first.kind {
         // Operate instructions - consolidated with macros
-        TokenKind::OpAdd => parse_reg_reg_or_imm!("ADD",
+        TokenKind::OpAdd => parse_reg_reg_or_imm!(
+            "ADD",
             |dr, sr1, sr2| Instruction::AddReg { dr, sr1, sr2 },
-            |dr, sr1, imm5| Instruction::AddImm { dr, sr1, imm5 })(tokens),
+            |dr, sr1, imm5| Instruction::AddImm { dr, sr1, imm5 }
+        )(tokens),
 
-        TokenKind::OpAnd => parse_reg_reg_or_imm!("AND",
+        TokenKind::OpAnd => parse_reg_reg_or_imm!(
+            "AND",
             |dr, sr1, sr2| Instruction::AndReg { dr, sr1, sr2 },
-            |dr, sr1, imm5| Instruction::AndImm { dr, sr1, imm5 })(tokens),
+            |dr, sr1, imm5| Instruction::AndImm { dr, sr1, imm5 }
+        )(tokens),
 
         TokenKind::OpNot => parse_not(tokens),
         TokenKind::OpBr(flags) => parse_br(tokens, *flags),
 
         // Data movement - PC offset (consolidated with macros)
-        TokenKind::OpLd => parse_reg_label!("LD", |dr, label| Instruction::Ld { dr, label })(tokens),
-        TokenKind::OpLdi => parse_reg_label!("LDI", |dr, label| Instruction::Ldi { dr, label })(tokens),
-        TokenKind::OpLea => parse_reg_label!("LEA", |dr, label| Instruction::Lea { dr, label })(tokens),
-        TokenKind::OpSt => parse_reg_label!("ST", |sr, label| Instruction::St { sr, label })(tokens),
-        TokenKind::OpSti => parse_reg_label!("STI", |sr, label| Instruction::Sti { sr, label })(tokens),
+        TokenKind::OpLd => {
+            parse_reg_label!("LD", |dr, label| Instruction::Ld { dr, label })(tokens)
+        }
+        TokenKind::OpLdi => {
+            parse_reg_label!("LDI", |dr, label| Instruction::Ldi { dr, label })(tokens)
+        }
+        TokenKind::OpLea => {
+            parse_reg_label!("LEA", |dr, label| Instruction::Lea { dr, label })(tokens)
+        }
+        TokenKind::OpSt => {
+            parse_reg_label!("ST", |sr, label| Instruction::St { sr, label })(tokens)
+        }
+        TokenKind::OpSti => {
+            parse_reg_label!("STI", |sr, label| Instruction::Sti { sr, label })(tokens)
+        }
 
         // Data movement - base+offset (consolidated with macros)
-        TokenKind::OpLdr => parse_reg_reg_imm!("LDR", |dr, base_r, offset6| Instruction::Ldr { dr, base_r, offset6 })(tokens),
-        TokenKind::OpStr => parse_reg_reg_imm!("STR", |sr, base_r, offset6| Instruction::Str { sr, base_r, offset6 })(tokens),
+        TokenKind::OpLdr => parse_reg_reg_imm!("LDR", |dr, base_r, offset6| Instruction::Ldr {
+            dr,
+            base_r,
+            offset6
+        })(tokens),
+        TokenKind::OpStr => parse_reg_reg_imm!("STR", |sr, base_r, offset6| Instruction::Str {
+            sr,
+            base_r,
+            offset6
+        })(tokens),
 
         // Control flow (consolidated with macros)
         TokenKind::OpJmp => parse_single_reg!("JMP", |base_r| Instruction::Jmp { base_r })(tokens),
         TokenKind::OpJsr => parse_single_label!("JSR", |label| Instruction::Jsr { label })(tokens),
-        TokenKind::OpJsrr => parse_single_reg!("JSRR", |base_r| Instruction::Jsrr { base_r })(tokens),
+        TokenKind::OpJsrr => {
+            parse_single_reg!("JSRR", |base_r| Instruction::Jsrr { base_r })(tokens)
+        }
 
         // Trap
         TokenKind::OpTrap => parse_trap(tokens),
@@ -247,7 +271,10 @@ fn parse_not(tokens: &[&Token]) -> Result<LineContent, AsmError> {
     Ok(LineContent::Instruction(Instruction::Not { dr, sr }))
 }
 
-fn parse_br(tokens: &[&Token], flags: crate::lexer::token::BrFlags) -> Result<LineContent, AsmError> {
+fn parse_br(
+    tokens: &[&Token],
+    flags: crate::lexer::token::BrFlags,
+) -> Result<LineContent, AsmError> {
     if tokens.len() < 2 {
         return Err(AsmError {
             kind: ErrorKind::TooFewOperands,

@@ -19,7 +19,7 @@
 //! - **.END** - End of program
 
 use crate::error::{AsmError, ErrorKind, Span};
-use crate::first_pass::{FirstPassResult, symbol_table::SymbolTable};
+use crate::first_pass::{symbol_table::SymbolTable, FirstPassResult};
 use crate::parser::ast::{Instruction, LineContent, SourceLine};
 
 /// Result of the encoding process
@@ -79,21 +79,20 @@ impl<'a> Encoder<'a> {
 
     fn encode_line(&mut self, line: &SourceLine) {
         match &line.content {
-            LineContent::Empty => {},
-            LineContent::Orig(_) => {},  // Already handled in first pass
-            LineContent::End => {},      // End of program
+            LineContent::Empty => {}
+            LineContent::Orig(_) => {} // Already handled in first pass
+            LineContent::End => {}     // End of program
             LineContent::FillImmediate(value) => {
                 self.emit(*value as u16);
             }
-            LineContent::FillLabel(label) => {
-                match self.symbol_table.get(label) {
-                    Some(addr) => self.emit(addr),
-                    None => {
-                        self.errors.push(AsmError::undefined_label(label, line.span));
-                        self.emit(0);
-                    }
+            LineContent::FillLabel(label) => match self.symbol_table.get(label) {
+                Some(addr) => self.emit(addr),
+                None => {
+                    self.errors
+                        .push(AsmError::undefined_label(label, line.span));
+                    self.emit(0);
                 }
-            }
+            },
             LineContent::Blkw(count) => {
                 for _ in 0..*count {
                     self.emit(0);
@@ -155,11 +154,19 @@ impl<'a> Encoder<'a> {
             }
 
             // Data movement with base+offset
-            Instruction::Ldr { dr, base_r, offset6 } => {
+            Instruction::Ldr {
+                dr,
+                base_r,
+                offset6,
+            } => {
                 let offset = sign_extend(*offset6, 6) & 0x3F;
                 (0b0110 << 12) | ((*dr as u16) << 9) | ((*base_r as u16) << 6) | offset
             }
-            Instruction::Str { sr, base_r, offset6 } => {
+            Instruction::Str {
+                sr,
+                base_r,
+                offset6,
+            } => {
                 let offset = sign_extend(*offset6, 6) & 0x3F;
                 (0b0111 << 12) | ((*sr as u16) << 9) | ((*base_r as u16) << 6) | offset
             }
@@ -167,14 +174,13 @@ impl<'a> Encoder<'a> {
             // Branch
             Instruction::Br { flags, label } => {
                 let offset = self.calc_pc_offset(label, 9, span);
-                let nzp = ((flags.n as u16) << 11) | ((flags.z as u16) << 10) | ((flags.p as u16) << 9);
+                let nzp =
+                    ((flags.n as u16) << 11) | ((flags.z as u16) << 10) | ((flags.p as u16) << 9);
                 (0b0000 << 12) | nzp | offset
             }
 
             // Jump
-            Instruction::Jmp { base_r } => {
-                (0b1100 << 12) | ((*base_r as u16) << 6)
-            }
+            Instruction::Jmp { base_r } => (0b1100 << 12) | ((*base_r as u16) << 6),
             Instruction::Ret => {
                 // RET is encoded as JMP R7
                 (0b1100 << 12) | (7 << 6)
@@ -185,14 +191,10 @@ impl<'a> Encoder<'a> {
                 let offset = self.calc_pc_offset(label, 11, span);
                 (0b0100 << 12) | (1 << 11) | offset
             }
-            Instruction::Jsrr { base_r } => {
-                (0b0100 << 12) | ((*base_r as u16) << 6)
-            }
+            Instruction::Jsrr { base_r } => (0b0100 << 12) | ((*base_r as u16) << 6),
 
             // Trap
-            Instruction::Trap { trapvect8 } => {
-                (0b1111 << 12) | (*trapvect8 as u16)
-            }
+            Instruction::Trap { trapvect8 } => (0b1111 << 12) | (*trapvect8 as u16),
             Instruction::Getc => 0xF020,  // TRAP x20
             Instruction::Out => 0xF021,   // TRAP x21
             Instruction::Puts => 0xF022,  // TRAP x22

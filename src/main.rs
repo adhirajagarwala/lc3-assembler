@@ -31,7 +31,9 @@ fn main() {
     let encoded = encode(&first);
 
     // Collect and print all errors
-    let all_errors: Vec<_> = lexed.errors.iter()
+    let all_errors: Vec<_> = lexed
+        .errors
+        .iter()
         .chain(parsed.errors.iter())
         .chain(first.errors.iter())
         .chain(encoded.errors.iter())
@@ -42,7 +44,10 @@ fn main() {
     }
 
     if !all_errors.is_empty() {
-        eprintln!("\n\u{274c} Assembly failed with {} error(s)", all_errors.len());
+        eprintln!(
+            "\n\u{274c} Assembly failed with {} error(s)",
+            all_errors.len()
+        );
         std::process::exit(1);
     }
 
@@ -64,12 +69,17 @@ fn main() {
             println!("   Input:  {}", input_file);
             println!("   Output: {}", output_file);
             println!("   Origin: 0x{:04X}", encoded.orig_address);
-            println!("   Size:   {} words ({} bytes)",
-                     encoded.machine_code.len(),
-                     encoded.machine_code.len() * 2);
+            println!(
+                "   Size:   {} words ({} bytes)",
+                encoded.machine_code.len(),
+                encoded.machine_code.len() * 2
+            );
         }
         Err(err) => {
-            eprintln!("\n\u{274c} Error: Failed to write '{}': {}", output_file, err);
+            eprintln!(
+                "\n\u{274c} Error: Failed to write '{}': {}",
+                output_file, err
+            );
             std::process::exit(1);
         }
     }

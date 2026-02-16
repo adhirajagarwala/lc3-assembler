@@ -171,7 +171,12 @@ fn lex_comment(
     }))
 }
 
-fn lex_string(cursor: &mut Cursor, sb: usize, sl: usize, sc: usize) -> Result<Option<Token>, AsmError> {
+fn lex_string(
+    cursor: &mut Cursor,
+    sb: usize,
+    sl: usize,
+    sc: usize,
+) -> Result<Option<Token>, AsmError> {
     cursor.advance();
     let mut processed = String::new();
     let mut raw = String::from("\"");
@@ -240,7 +245,12 @@ fn lex_string(cursor: &mut Cursor, sb: usize, sl: usize, sc: usize) -> Result<Op
     }))
 }
 
-fn lex_decimal(cursor: &mut Cursor, sb: usize, sl: usize, sc: usize) -> Result<Option<Token>, AsmError> {
+fn lex_decimal(
+    cursor: &mut Cursor,
+    sb: usize,
+    sl: usize,
+    sc: usize,
+) -> Result<Option<Token>, AsmError> {
     cursor.advance();
     let mut raw = String::from("#");
     let mut sign = String::new();
@@ -280,7 +290,12 @@ fn lex_decimal(cursor: &mut Cursor, sb: usize, sl: usize, sc: usize) -> Result<O
     }))
 }
 
-fn lex_directive(cursor: &mut Cursor, sb: usize, sl: usize, sc: usize) -> Result<Option<Token>, AsmError> {
+fn lex_directive(
+    cursor: &mut Cursor,
+    sb: usize,
+    sl: usize,
+    sc: usize,
+) -> Result<Option<Token>, AsmError> {
     cursor.advance();
     let mut raw = String::from(".");
     let mut word = String::new();
@@ -314,7 +329,12 @@ fn lex_directive(cursor: &mut Cursor, sb: usize, sl: usize, sc: usize) -> Result
     }))
 }
 
-fn lex_word(cursor: &mut Cursor, sb: usize, sl: usize, sc: usize) -> Result<Option<Token>, AsmError> {
+fn lex_word(
+    cursor: &mut Cursor,
+    sb: usize,
+    sl: usize,
+    sc: usize,
+) -> Result<Option<Token>, AsmError> {
     let mut word = String::new();
     while matches!(cursor.peek(), Some(c) if c.is_ascii_alphanumeric() || c == '_') {
         let ch = cursor.advance().unwrap();

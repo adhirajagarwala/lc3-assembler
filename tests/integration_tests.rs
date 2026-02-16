@@ -122,7 +122,7 @@ fn encode_hello_program() {
     let encoded = run_full_pipeline("tests/test_programs/hello.asm");
     assert_eq!(encoded.orig_address, 0x3000);
     assert!(
-        encoded.machine_code.len() > 0,
+        !encoded.machine_code.is_empty(),
         "Should generate machine code"
     );
     // LEA R0, MSG (0xE002) + PUTS (0xF022) + HALT (0xF025) + "Hello" + null
@@ -171,10 +171,10 @@ fn encode_trap_aliases() {
     assert_eq!(encoded.orig_address, 0x3000);
 
     // Check that trap aliases are properly encoded
-    let has_getc = encoded.machine_code.iter().any(|&w| w == 0xF020);
-    let has_out = encoded.machine_code.iter().any(|&w| w == 0xF021);
-    let has_puts = encoded.machine_code.iter().any(|&w| w == 0xF022);
-    let has_halt = encoded.machine_code.iter().any(|&w| w == 0xF025);
+    let has_getc = encoded.machine_code.contains(&0xF020);
+    let has_out = encoded.machine_code.contains(&0xF021);
+    let has_puts = encoded.machine_code.contains(&0xF022);
+    let has_halt = encoded.machine_code.contains(&0xF025);
 
     assert!(has_getc || has_out || has_puts, "Should have TRAP aliases");
     assert!(has_halt, "Should have HALT");
@@ -193,14 +193,14 @@ fn encode_fill_directive() {
     let encoded = run_full_pipeline("tests/test_programs/all_directives.asm");
     assert_eq!(encoded.orig_address, 0x3000);
     // Should contain .FILL values
-    assert!(encoded.machine_code.len() > 0);
+    assert!(!encoded.machine_code.is_empty());
 }
 
 #[test]
 fn encode_stringz_directive() {
     let encoded = run_full_pipeline("tests/test_programs/hello.asm");
     // Check for string data with null terminator
-    let has_null = encoded.machine_code.iter().any(|&w| w == 0x0000);
+    let has_null = encoded.machine_code.contains(&0x0000);
     assert!(has_null, "STRINGZ should end with null terminator");
 }
 
@@ -210,7 +210,7 @@ fn encode_pc_offset_calculation() {
     assert_eq!(encoded.orig_address, 0x3000);
     // Program has BR instruction that should have valid PC offset
     assert!(
-        encoded.machine_code.len() > 0,
+        !encoded.machine_code.is_empty(),
         "Should encode branch instructions"
     );
 }

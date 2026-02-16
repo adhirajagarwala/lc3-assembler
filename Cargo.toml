@@ -10,7 +10,7 @@ repository = "https://github.com/your-repo/lc3-assembler"
 license = "MIT"
 keywords = ["lc3", "assembler", "computer-architecture", "education", "compiler"]
 categories = ["command-line-utilities", "development-tools", "education"]
-rust-version = "1.60"
+rust-version = "1.70"
 
 [[bin]]
 name = "lc3-assembler"

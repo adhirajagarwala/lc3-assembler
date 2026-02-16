@@ -1,0 +1,114 @@
+{
+  "Basic Program Structure": {
+    "prefix": "lc3prog",
+    "body": [
+      "; ${1:Program description}",
+      ".ORIG x3000",
+      "\t${2:; Your code here}",
+      "\tHALT",
+      ".END"
+    ],
+    "description": "Basic LC-3 program structure"
+  },
+  "Subroutine Template": {
+    "prefix": "lc3sub",
+    "body": [
+      "; Subroutine: ${1:NAME}",
+      "; Description: ${2:What it does}",
+      "; Parameters: ${3:R0 = input parameter}",
+      "; Returns: ${4:R0 = return value}",
+      "${1:NAME}",
+      "\t; Save registers",
+      "\tADD R6, R6, #-1",
+      "\tSTR R7, R6, #0",
+      "\t",
+      "\t${5:; Subroutine body}",
+      "\t",
+      "\t; Restore registers",
+      "\tLDR R7, R6, #0",
+      "\tADD R6, R6, #1",
+      "\tRET"
+    ],
+    "description": "LC-3 subroutine template with stack management"
+  },
+  "Push Register to Stack": {
+    "prefix": "push",
+    "body": [
+      "ADD R6, R6, #-1\t; Decrement stack pointer",
+      "STR ${1:R0}, R6, #0\t; Push ${1:R0}"
+    ],
+    "description": "Push a register onto the stack"
+  },
+  "Pop Register from Stack": {
+    "prefix": "pop",
+    "body": [
+      "LDR ${1:R0}, R6, #0\t; Pop ${1:R0}",
+      "ADD R6, R6, #1\t; Increment stack pointer"
+    ],
+    "description": "Pop a register from the stack"
+  },
+  "String Output": {
+    "prefix": "lc3string",
+    "body": [
+      "\tLEA R0, ${1:STRING_LABEL}",
+      "\tPUTS",
+      "\t",
+      "${1:STRING_LABEL}\t.STRINGZ \"${2:Hello, World!}\""
+    ],
+    "description": "Output a string to console"
+  },
+  "Loop Structure": {
+    "prefix": "lc3loop",
+    "body": [
+      "${1:LOOP}\t; Loop counter in ${2:R1}",
+      "\t${3:; Loop body}",
+      "\t",
+      "\tADD ${2:R1}, ${2:R1}, #-1\t; Decrement counter",
+      "\tBRp ${1:LOOP}\t\t; Continue if positive"
+    ],
+    "description": "Basic loop structure with counter"
+  },
+  "Conditional Branch": {
+    "prefix": "lc3if",
+    "body": [
+      "\t${1:; Test condition}",
+      "\tBR${2|z,p,n,zp,nz,np,nzp|} ${3:THEN}",
+      "\t${4:; Else branch}",
+      "\tBR ${5:END_IF}",
+      "${3:THEN}",
+      "\t${6:; Then branch}",
+      "${5:END_IF}"
+    ],
+    "description": "Conditional branch (if-else structure)"
+  },
+  "TRAP System Call": {
+    "prefix": "trap",
+    "body": [
+      "TRAP x${1|20,21,22,23,24,25|}\t; ${1/(20)|(21)|(22)|(23)|(24)|(25)/(?1:GETC)(?2:OUT)(?3:PUTS)(?4:IN)(?5:PUTSP)(?6:HALT)/}"
+    ],
+    "description": "TRAP system call"
+  },
+  "Data Section": {
+    "prefix": "lc3data",
+    "body": [
+      "; Data section",
+      "${1:CONSTANT}\t.FILL ${2:#10}",
+      "${3:BUFFER}\t.BLKW ${4:#100}",
+      "${5:MESSAGE}\t.STRINGZ \"${6:Text}\""
+    ],
+    "description": "Data section with various directives"
+  },
+  "Comment Header": {
+    "prefix": "lc3header",
+    "body": [
+      ";==============================================================================",
+      "; ${1:Section Title}",
+      ";==============================================================================",
+      "; Description: ${2:Detailed description}",
+      "; Author: ${3:Your Name}",
+      "; Date: ${4:$CURRENT_YEAR-$CURRENT_MONTH-$CURRENT_DATE}",
+      ";=============================================================================="
+    ],
+    "description": "Section header comment block"
+  }
+}

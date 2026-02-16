@@ -1,0 +1,174 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "LC-3 Assembly",
+  "scopeName": "source.lc3asm",
+  "fileTypes": ["asm", "lc3"],
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#directives"
+    },
+    {
+      "include": "#labels"
+    },
+    {
+      "include": "#opcodes"
+    },
+    {
+      "include": "#pseudo-ops"
+    },
+    {
+      "include": "#registers"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#punctuation"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.semicolon.lc3asm",
+          "match": ";.*$"
+        }
+      ]
+    },
+    "directives": {
+      "patterns": [
+        {
+          "name": "keyword.control.directive.lc3asm",
+          "match": "\\.(ORIG|END|FILL|BLKW|STRINGZ)\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.control.directive.lc3asm"
+            }
+          }
+        }
+      ]
+    },
+    "labels": {
+      "patterns": [
+        {
+          "comment": "Label definition at the start of a line",
+          "name": "entity.name.label.lc3asm",
+          "match": "^\\s*([A-Z_][A-Z0-9_]*)(?=\\s|;|$)",
+          "captures": {
+            "1": {
+              "name": "entity.name.label.definition.lc3asm"
+            }
+          }
+        },
+        {
+          "comment": "Label reference as operand",
+          "name": "variable.other.label.lc3asm",
+          "match": "\\b([A-Z_][A-Z0-9_]*)\\b(?!\\s*:)"
+        }
+      ]
+    },
+    "opcodes": {
+      "patterns": [
+        {
+          "comment": "Operate instructions",
+          "name": "keyword.operator.instruction.operate.lc3asm",
+          "match": "\\b(ADD|AND|NOT)\\b"
+        },
+        {
+          "comment": "Branch instructions with all variants",
+          "name": "keyword.control.branch.lc3asm",
+          "match": "\\b(BR|BRn|BRz|BRp|BRnz|BRnp|BRzp|BRnzp)\\b"
+        },
+        {
+          "comment": "Jump and subroutine instructions",
+          "name": "keyword.control.jump.lc3asm",
+          "match": "\\b(JMP|JSR|JSRR)\\b"
+        },
+        {
+          "comment": "Load instructions",
+          "name": "keyword.operator.instruction.load.lc3asm",
+          "match": "\\b(LD|LDI|LDR|LEA)\\b"
+        },
+        {
+          "comment": "Store instructions",
+          "name": "keyword.operator.instruction.store.lc3asm",
+          "match": "\\b(ST|STI|STR)\\b"
+        },
+        {
+          "comment": "Trap and system instructions",
+          "name": "keyword.control.trap.lc3asm",
+          "match": "\\b(TRAP|RTI)\\b"
+        }
+      ]
+    },
+    "pseudo-ops": {
+      "patterns": [
+        {
+          "comment": "TRAP pseudo-operations",
+          "name": "keyword.control.pseudo.lc3asm",
+          "match": "\\b(RET|GETC|OUT|PUTS|IN|PUTSP|HALT)\\b"
+        }
+      ]
+    },
+    "registers": {
+      "patterns": [
+        {
+          "name": "variable.language.register.lc3asm",
+          "match": "\\bR[0-7]\\b"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "comment": "Decimal literals with # prefix",
+          "name": "constant.numeric.decimal.lc3asm",
+          "match": "#-?\\d+"
+        },
+        {
+          "comment": "Hexadecimal literals with x prefix",
+          "name": "constant.numeric.hex.lc3asm",
+          "match": "\\bx[0-9A-Fa-f]+\\b"
+        },
+        {
+          "comment": "Binary literals with b prefix",
+          "name": "constant.numeric.binary.lc3asm",
+          "match": "\\bb[01]+\\b"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.lc3asm",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.lc3asm",
+              "match": "\\\\[nrt\\\\\"0]"
+            },
+            {
+              "name": "invalid.illegal.unknown-escape.lc3asm",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        {
+          "name": "punctuation.separator.comma.lc3asm",
+          "match": ","
+        }
+      ]
+    }
+  }
+}

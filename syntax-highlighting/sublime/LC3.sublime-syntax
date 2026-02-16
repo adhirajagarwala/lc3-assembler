@@ -1,0 +1,128 @@
+%YAML 1.2
+---
+# Sublime Text Syntax Definition for LC-3 Assembly
+# Language:     LC-3 Assembly
+# Version:      1.0
+# Date:         2026-02-15
+#
+# Installation:
+#   1. Copy this file to:
+#      - Windows: %APPDATA%\Sublime Text\Packages\User\LC3.sublime-syntax
+#      - macOS: ~/Library/Application Support/Sublime Text/Packages/User/LC3.sublime-syntax
+#      - Linux: ~/.config/sublime-text/Packages/User/LC3.sublime-syntax
+#   2. Restart Sublime Text or reload the window
+#   3. Open a .asm file and select View > Syntax > LC3
+
+name: LC-3 Assembly
+file_extensions:
+  - asm
+  - lc3
+scope: source.lc3asm
+
+variables:
+  # Registers R0-R7
+  register: '\bR[0-7]\b'
+
+  # Labels (uppercase identifier)
+  label: '\b[A-Z_][A-Z0-9_]*\b'
+
+  # Numbers
+  decimal: '#-?\d+'
+  hexadecimal: '\bx[0-9A-Fa-f]+'
+  binary: '\bb[01]+'
+
+contexts:
+  main:
+    # Comments
+    - match: ';.*$'
+      scope: comment.line.semicolon.lc3asm
+      captures:
+        0: punctuation.definition.comment.lc3asm
+
+    # Directives
+    - match: '\.(ORIG|END|FILL|BLKW|STRINGZ)\b'
+      scope: keyword.control.directive.lc3asm
+
+    # String literals
+    - match: '"'
+      scope: punctuation.definition.string.begin.lc3asm
+      push: string_content
+
+    # Label definitions (at start of line)
+    - match: '^[ \t]*({{label}})'
+      captures:
+        1: entity.name.label.lc3asm
+
+    # Operate instructions
+    - match: '\b(ADD|AND|NOT)\b'
+      scope: keyword.operator.instruction.operate.lc3asm
+
+    # Branch instructions
+    - match: '\b(BR|BRn|BRz|BRp|BRnz|BRnp|BRzp|BRnzp)\b'
+      scope: keyword.control.branch.lc3asm
+
+    # Jump and subroutine instructions
+    - match: '\b(JMP|JSR|JSRR)\b'
+      scope: keyword.control.jump.lc3asm
+
+    # Load instructions
+    - match: '\b(LD|LDI|LDR|LEA)\b'
+      scope: keyword.operator.instruction.load.lc3asm
+
+    # Store instructions
+    - match: '\b(ST|STI|STR)\b'
+      scope: keyword.operator.instruction.store.lc3asm
+
+    # Trap and system instructions
+    - match: '\b(TRAP|RTI)\b'
+      scope: keyword.control.trap.lc3asm
+
+    # Pseudo-operations
+    - match: '\b(RET|GETC|OUT|PUTS|IN|PUTSP|HALT)\b'
+      scope: keyword.control.pseudo.lc3asm
+
+    # Registers
+    - match: '{{register}}'
+      scope: variable.language.register.lc3asm
+
+    # Decimal numbers
+    - match: '{{decimal}}'
+      scope: constant.numeric.decimal.lc3asm
+
+    # Hexadecimal numbers
+    - match: '{{hexadecimal}}'
+      scope: constant.numeric.hex.lc3asm
+
+    # Binary numbers
+    - match: '{{binary}}'
+      scope: constant.numeric.binary.lc3asm
+
+    # Label references (as operands)
+    - match: '{{label}}'
+      scope: variable.other.label.lc3asm
+
+    # Comma separator
+    - match: ','
+      scope: punctuation.separator.comma.lc3asm
+
+  # String context
+  string_content:
+    - meta_scope: string.quoted.double.lc3asm
+
+    # Escape sequences
+    - match: '\\[nrt\\"0]'
+      scope: constant.character.escape.lc3asm
+
+    # Invalid escape sequences
+    - match: '\\.'
+      scope: invalid.illegal.unknown-escape.lc3asm
+
+    # End of string
+    - match: '"'
+      scope: punctuation.definition.string.end.lc3asm
+      pop: true
+
+    # Newline (error - unterminated string)
+    - match: '\n'
+      scope: invalid.illegal.unterminated-string.lc3asm
+      pop: true

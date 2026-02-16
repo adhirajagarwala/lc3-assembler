@@ -1,0 +1,30 @@
+# Git
+.git
+.gitignore
+.github
+
+# Documentation
+*.md
+docs/
+syntax-highlighting/
+
+# Build artifacts
+target/
+**/*.obj
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test files
+tests/test_programs/
+
+# CI/CD
+.github/workflows/

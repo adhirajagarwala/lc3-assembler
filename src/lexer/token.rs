@@ -40,8 +40,8 @@ pub enum TokenKind {
     OpTrap,
     OpRti,
 
-    // === Pseudo-ops (TRAP shortcuts) ===
-    PseudoRet,   // TRAP x25 (HALT)
+    // === Pseudo-ops ===
+    PseudoRet,   // JMP R7 (return from subroutine) — NOT a TRAP instruction
     PseudoGetc,  // TRAP x20
     PseudoOut,   // TRAP x21
     PseudoPuts,  // TRAP x22
@@ -117,15 +117,12 @@ impl BrFlags {
                 'N' => n = true,
                 'Z' => z = true,
                 'P' => p = true,
-                _ => return None,
+                _ => return None, // unknown char → not a valid BR variant
             }
         }
-
-        // At least one flag must be set
-        if !n && !z && !p {
-            return None;
-        }
-
+        // Note: the guard "!n && !z && !p" was removed because it is unreachable:
+        // • empty flags_part returns early above (BRnzp)
+        // • non-empty flags_part either sets ≥1 flag or the `_ => return None` fires first
         Some(Self::new(n, z, p))
     }
 

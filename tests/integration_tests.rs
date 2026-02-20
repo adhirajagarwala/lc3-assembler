@@ -15,7 +15,7 @@ fn run_pipeline(path: &str) -> lc3_assembler::first_pass::FirstPassResult {
         "Parser errors: {:?}",
         parsed.errors
     );
-    let result = first_pass(&parsed.lines);
+    let result = first_pass(parsed.lines);
     assert!(
         result.errors.is_empty(),
         "First pass errors: {:?}",
@@ -34,7 +34,7 @@ fn run_full_pipeline(path: &str) -> lc3_assembler::encoder::EncodeResult {
         "Parser errors: {:?}",
         parsed.errors
     );
-    let first = first_pass(&parsed.lines);
+    let first = first_pass(parsed.lines);
     assert!(
         first.errors.is_empty(),
         "First pass errors: {:?}",

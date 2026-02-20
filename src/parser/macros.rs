@@ -39,6 +39,18 @@ macro_rules! parse_reg_reg_or_imm {
                 $crate::parser::macros::ensure_no_extra(tokens, 6)?;
                 Ok(LineContent::Instruction($reg_variant(dr, sr1, sr2)))
             } else if let Some(imm) = $crate::parser::macros::token_to_i32(tokens[5]) {
+                // Validate the 5-bit signed immediate range (-16..=15).
+                // Without this, `ADD R1, R1, #100` silently truncates to a wrong value.
+                if !(-16..=15).contains(&imm) {
+                    return Err(AsmError {
+                        kind: ErrorKind::InvalidOperandType,
+                        message: format!(
+                            "{} immediate value {} is out of 5-bit signed range (-16 to 15)",
+                            $name, imm
+                        ),
+                        span: tokens[5].span,
+                    });
+                }
                 $crate::parser::macros::ensure_no_extra(tokens, 6)?;
                 Ok(LineContent::Instruction($imm_variant(dr, sr1, imm as i16)))
             } else {
@@ -98,6 +110,18 @@ macro_rules! parse_reg_reg_imm {
                 message: format!("{} third operand must be an immediate (#n)", $name),
                 span: tokens[5].span,
             })?;
+            // Validate the 6-bit signed offset range (-32..=31).
+            // Without this, `LDR R0, R1, #100` silently truncates to a wrong offset.
+            if !(-32..=31).contains(&value) {
+                return Err(AsmError {
+                    kind: ErrorKind::InvalidOperandType,
+                    message: format!(
+                        "{} offset value {} is out of 6-bit signed range (-32 to 31)",
+                        $name, value
+                    ),
+                    span: tokens[5].span,
+                });
+            }
             $crate::parser::macros::ensure_no_extra(tokens, 6)?;
             Ok(LineContent::Instruction($variant(r1, r2, value as i16)))
         }
@@ -165,7 +189,8 @@ macro_rules! parse_no_operands {
     };
 }
 
-// Helper functions used by macros (must be public for macro access)
-pub use super::{
+// Re-export helpers at parser::macros so macro expansions can reach them via
+// `$crate::parser::macros::*`. Using pub(crate) keeps them out of the public API.
+pub(crate) use super::{
     ensure_no_extra, expect_comma, expect_label, expect_register, token_to_i32, token_to_register,
 };

@@ -94,12 +94,14 @@ pub enum ErrorKind {
     DuplicateLabel,
     MissingOrig,
     MultipleOrig,
-    OrigNotFirst,
+    // OrigNotFirst was removed — the first pass handles this via MissingOrig instead,
+    // and this variant was never constructed anywhere in the codebase.
     MissingEnd,
     InvalidOrigAddress,
     InvalidBlkwCount,
     AddressOverflow,
-    LabelIsReservedWord,
+    // LabelIsReservedWord was removed — the check for reserved-word labels was never
+    // implemented. Re-add it when the validation is actually coded (see feature gap 8.1).
     UndefinedLabel,
     OffsetOutOfRange,
 }
@@ -113,3 +115,7 @@ impl std::fmt::Display for AsmError {
         )
     }
 }
+
+/// Make AsmError compatible with the standard Rust error-handling ecosystem.
+/// This allows it to be used with `?`, `Box<dyn Error>`, `anyhow`, etc.
+impl std::error::Error for AsmError {}

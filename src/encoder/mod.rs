@@ -44,6 +44,7 @@ pub struct EncodeResult {
 /// # Returns
 ///
 /// An `EncodeResult` containing the machine code and any errors encountered
+#[must_use]
 pub fn encode(first_pass: &FirstPassResult) -> EncodeResult {
     let mut encoder = Encoder::new(&first_pass.symbol_table, first_pass.orig_address);
 
@@ -174,9 +175,10 @@ impl<'a> Encoder<'a> {
             // Branch
             Instruction::Br { flags, label } => {
                 let offset = self.calc_pc_offset(label, 9, span);
-                let nzp =
-                    ((flags.n as u16) << 11) | ((flags.z as u16) << 10) | ((flags.p as u16) << 9);
-                nzp | offset
+                // Use BrFlags::as_u16() which already encodes [N][Z][P] as a 3-bit value.
+                // Shifting left by 9 places n→bit11, z→bit10, p→bit9.
+                // The old manual encoding duplicated the same arithmetic already in as_u16().
+                (flags.as_u16() << 9) | offset
             }
 
             // Jump

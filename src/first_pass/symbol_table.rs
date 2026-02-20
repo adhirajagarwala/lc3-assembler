@@ -22,10 +22,19 @@ impl SymbolTable {
     }
 
     pub fn insert(&mut self, label: String, address: u16) {
-        if !self.map.contains_key(&label) {
-            self.order.push(label.clone());
+        use std::collections::hash_map::Entry;
+        // Entry API: single hash lookup instead of contains_key + insert (two lookups).
+        // On a new label (Vacant), clone the key to maintain insertion order in `order`.
+        // On an existing label (Occupied), just update the value without touching `order`.
+        match self.map.entry(label) {
+            Entry::Vacant(e) => {
+                self.order.push(e.key().clone());
+                e.insert(address);
+            }
+            Entry::Occupied(mut e) => {
+                *e.get_mut() = address;
+            }
         }
-        self.map.insert(label, address);
     }
 
     pub fn get(&self, label: &str) -> Option<u16> {

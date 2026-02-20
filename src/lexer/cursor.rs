@@ -41,9 +41,7 @@ impl Cursor {
         self.chars.get(self.pos).copied()
     }
 
-    pub fn peek_next(&self) -> Option<char> {
-        self.chars.get(self.pos + 1).copied()
-    }
+    // peek_next() was removed — it was defined but never called anywhere in the codebase.
 
     /// Advance to the next character and return it
     ///

@@ -36,6 +36,7 @@ pub struct ParseResult {
     pub errors: Vec<AsmError>,
 }
 
+#[must_use]
 pub fn parse_lines(tokens: &[Token]) -> ParseResult {
     let mut lines = Vec::new();
     let mut errors = Vec::new();
@@ -300,6 +301,18 @@ fn parse_trap(tokens: &[&Token]) -> Result<LineContent, AsmError> {
         message: "TRAP requires a numeric trap vector (e.g., TRAP x25)".into(),
         span: tokens[1].span,
     })?;
+    // Trap vector must fit in 8 bits (0x00–0xFF). Without this check,
+    // `TRAP x1FF` silently truncates to `TRAP xFF`, producing wrong machine code.
+    if !(0..=0xFF).contains(&value) {
+        return Err(AsmError {
+            kind: ErrorKind::InvalidOperandType,
+            message: format!(
+                "TRAP vector {} is out of range (must be 0x00-0xFF)",
+                value
+            ),
+            span: tokens[1].span,
+        });
+    }
     ensure_no_extra(tokens, 2)?;
     Ok(LineContent::Instruction(Instruction::Trap {
         trapvect8: value as u8,
@@ -319,7 +332,12 @@ fn parse_orig(tokens: &[&Token]) -> Result<LineContent, AsmError> {
         message: ".ORIG requires a numeric operand".into(),
         span: tokens[1].span,
     })?;
-    if !(0..=0xFFFF).contains(&value) {
+    // Accept any value whose 16-bit representation is valid (0x0000–0xFFFF).
+    // Hex/binary literals above 0x7FFF arrive as negative i32 values due to the
+    // two's complement conversion in the lexer (e.g. xFFFF → -1, x8000 → -32768).
+    // Decimal literals arrive as positive i32 (e.g. #65535 → 65535).
+    // Both representations must be accepted for the full 16-bit address space.
+    if !(i16::MIN as i32..=0xFFFF_i32).contains(&value) {
         return Err(AsmError {
             kind: ErrorKind::InvalidOrigAddress,
             message: ".ORIG address must be 0x0000-0xFFFF".into(),
@@ -350,6 +368,19 @@ fn parse_fill(tokens: &[&Token]) -> Result<LineContent, AsmError> {
         });
     }
     if let Some(value) = token_to_i32(tokens[1]) {
+        // Validate the value fits in a 16-bit slot.
+        // Hex/binary > 0x7FFF arrive as negative i32 (e.g. xFFFF → -1), so we
+        // accept -32768..=65535 to cover the full unsigned 16-bit range.
+        if !(i16::MIN as i32..=0xFFFF_i32).contains(&value) {
+            return Err(AsmError {
+                kind: ErrorKind::InvalidOperandType,
+                message: format!(
+                    ".FILL value {} is out of 16-bit range (-32768 to 65535)",
+                    value
+                ),
+                span: tokens[1].span,
+            });
+        }
         ensure_no_extra(tokens, 2)?;
         Ok(LineContent::FillImmediate(value))
     } else if let Some(label) = token_to_label(tokens[1]) {
@@ -377,6 +408,19 @@ fn parse_blkw(tokens: &[&Token]) -> Result<LineContent, AsmError> {
         message: ".BLKW requires a numeric operand".into(),
         span: tokens[1].span,
     })?;
+    // Reject negative or zero counts now, in the parser, with a clear error.
+    // Without this check, `.BLKW #-1` silently casts to 65535 (u16::MAX) and
+    // allocates a 65535-word block, producing silently wrong output.
+    if value <= 0 || value > 0xFFFF {
+        return Err(AsmError {
+            kind: ErrorKind::InvalidBlkwCount,
+            message: format!(
+                ".BLKW count {} is out of range (must be 1-65535)",
+                value
+            ),
+            span: tokens[1].span,
+        });
+    }
     ensure_no_extra(tokens, 2)?;
     Ok(LineContent::Blkw(value as u16))
 }
@@ -402,8 +446,9 @@ fn parse_stringz(tokens: &[&Token]) -> Result<LineContent, AsmError> {
     }
 }
 
-// Helper functions - now public for macro access
-pub fn ensure_no_extra(tokens: &[&Token], expected_len: usize) -> Result<(), AsmError> {
+// Helper functions — pub(crate) so macros in macros.rs can call them via
+// `$crate::parser::macros::*` without exposing them in the public library API.
+pub(crate) fn ensure_no_extra(tokens: &[&Token], expected_len: usize) -> Result<(), AsmError> {
     if tokens.len() > expected_len {
         return Err(AsmError {
             kind: ErrorKind::UnexpectedToken,
@@ -414,7 +459,7 @@ pub fn ensure_no_extra(tokens: &[&Token], expected_len: usize) -> Result<(), Asm
     Ok(())
 }
 
-pub fn expect_comma(tokens: &[&Token], idx: usize, message: &str) -> Result<(), AsmError> {
+pub(crate) fn expect_comma(tokens: &[&Token], idx: usize, message: &str) -> Result<(), AsmError> {
     if tokens.len() <= idx {
         return Err(AsmError {
             kind: ErrorKind::ExpectedComma,
@@ -432,7 +477,7 @@ pub fn expect_comma(tokens: &[&Token], idx: usize, message: &str) -> Result<(), 
     }
 }
 
-pub fn expect_register(tokens: &[&Token], idx: usize, message: &str) -> Result<u8, AsmError> {
+pub(crate) fn expect_register(tokens: &[&Token], idx: usize, message: &str) -> Result<u8, AsmError> {
     if tokens.len() <= idx {
         return Err(AsmError {
             kind: ErrorKind::ExpectedRegister,
@@ -447,7 +492,7 @@ pub fn expect_register(tokens: &[&Token], idx: usize, message: &str) -> Result<u
     })
 }
 
-pub fn expect_label(tokens: &[&Token], idx: usize, message: &str) -> Result<String, AsmError> {
+pub(crate) fn expect_label(tokens: &[&Token], idx: usize, message: &str) -> Result<String, AsmError> {
     if tokens.len() <= idx {
         return Err(AsmError {
             kind: ErrorKind::ExpectedOperand,
@@ -462,7 +507,7 @@ pub fn expect_label(tokens: &[&Token], idx: usize, message: &str) -> Result<Stri
     })
 }
 
-pub fn token_to_i32(token: &Token) -> Option<i32> {
+pub(crate) fn token_to_i32(token: &Token) -> Option<i32> {
     match &token.kind {
         TokenKind::NumDecimal(v) => Some(*v),
         TokenKind::NumHex(v) => Some(*v),
@@ -471,14 +516,14 @@ pub fn token_to_i32(token: &Token) -> Option<i32> {
     }
 }
 
-pub fn token_to_register(token: &Token) -> Option<u8> {
+pub(crate) fn token_to_register(token: &Token) -> Option<u8> {
     match &token.kind {
         TokenKind::Register(r) => Some(*r),
         _ => None,
     }
 }
 
-pub fn token_to_label(token: &Token) -> Option<String> {
+pub(crate) fn token_to_label(token: &Token) -> Option<String> {
     match &token.kind {
         TokenKind::Label(s) => Some(s.clone()),
         _ => None,

@@ -58,6 +58,7 @@ fn process_escape_char(esc: char) -> Option<char> {
     }
 }
 
+#[must_use]
 pub fn tokenize(source: &str) -> LexResult {
     // TODO-MED: Consider builder pattern for Token creation to avoid manual Span construction
     let mut cursor = Cursor::new(source);

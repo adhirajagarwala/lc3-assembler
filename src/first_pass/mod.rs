@@ -40,14 +40,21 @@ enum AssemblerState {
     AfterEnd,
 }
 
-pub fn first_pass(lines: &[SourceLine]) -> FirstPassResult {
+/// Perform the first pass of the assembler.
+///
+/// Takes ownership of the parsed lines so the resulting `FirstPassResult`
+/// can store them directly without cloning. Previously this function accepted
+/// `&[SourceLine]` and called `lines.to_vec()` at the end — an unnecessary
+/// clone of the entire AST. Taking `Vec<SourceLine>` eliminates that allocation.
+#[must_use]
+pub fn first_pass(lines: Vec<SourceLine>) -> FirstPassResult {
     let mut symbol_table = SymbolTable::new();
     let mut errors = Vec::new();
     let mut location_counter: Option<u16> = None;
     let mut orig_address: u16 = 0;
     let mut state = AssemblerState::WaitingForOrig;
 
-    for line in lines {
+    for line in &lines {
         match state {
             AssemblerState::WaitingForOrig => match &line.content {
                 LineContent::Orig(addr) => {
@@ -150,7 +157,7 @@ pub fn first_pass(lines: &[SourceLine]) -> FirstPassResult {
 
     FirstPassResult {
         symbol_table,
-        source_lines: lines.to_vec(),
+        source_lines: lines, // No clone needed — we own the Vec
         orig_address,
         errors,
     }
@@ -163,8 +170,9 @@ fn record_label(
     span: Span,
     errors: &mut Vec<AsmError>,
 ) {
-    if table.contains(label) {
-        let first_addr = table.get(label).unwrap();
+    // Single lookup: if Some, it's a duplicate; if None, insert it.
+    // The old code called `contains` (hash lookup) then `get` (another lookup).
+    if let Some(first_addr) = table.get(label) {
         errors.push(AsmError::duplicate_label(label, first_addr, span));
     } else {
         table.insert(label.to_string(), address);

@@ -1,6 +1,6 @@
 use std::env;
 use std::fs;
-use std::io::Write;
+use std::path::Path;
 
 use lc3_assembler::encoder::encode;
 use lc3_assembler::first_pass::first_pass;
@@ -27,7 +27,7 @@ fn main() {
 
     let lexed = tokenize(&source);
     let parsed = parse_lines(&lexed.tokens);
-    let first = first_pass(&parsed.lines);
+    let first = first_pass(parsed.lines); // moves lines into first_pass; parsed.errors still accessible
     let encoded = encode(&first);
 
     // Collect and print all errors
@@ -55,11 +55,16 @@ fn main() {
     println!("\n\u{1f4cb} Symbol Table:");
     first.symbol_table.print_table();
 
-    // Determine output file name
+    // Determine output file name.
+    // Use Path::with_extension so that only the file extension is replaced.
+    // The old `replace(".asm", ".obj")` would corrupt paths like `/my.asm/prog.asm`.
     let output_file = if args.len() >= 4 && args[2] == "-o" {
         args[3].clone()
     } else {
-        input_file.replace(".asm", ".obj")
+        Path::new(input_file)
+            .with_extension("obj")
+            .to_string_lossy()
+            .into_owned()
     };
 
     // Write binary output (LC-3 object file format)
@@ -86,15 +91,20 @@ fn main() {
 }
 
 fn write_obj_file(path: &str, orig: u16, code: &[u16]) -> std::io::Result<()> {
-    let mut file = fs::File::create(path)?;
+    // Pre-allocate the full output buffer and issue a single write_all.
+    // The old per-word approach issued one syscall per 2-byte word, meaning a
+    // 1000-word program made 1001 write syscalls. Now it's always exactly 1.
+    let total_words = 1 + code.len(); // origin word + machine code words
+    let mut buf = Vec::with_capacity(total_words * 2);
 
-    // Write origin address (big-endian)
-    file.write_all(&orig.to_be_bytes())?;
+    // Write origin address (big-endian) into buffer
+    buf.extend_from_slice(&orig.to_be_bytes());
 
-    // Write machine code (big-endian)
+    // Write all machine code words (big-endian) into buffer
     for &word in code {
-        file.write_all(&word.to_be_bytes())?;
+        buf.extend_from_slice(&word.to_be_bytes());
     }
 
-    Ok(())
+    // Single write_all — one syscall for the entire file
+    fs::write(path, &buf)
 }

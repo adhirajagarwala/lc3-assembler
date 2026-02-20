@@ -10,7 +10,7 @@ mod tests {
         assert!(lexed.errors.is_empty(), "Lexer errors: {:?}", lexed.errors);
         let parsed = parse_lines(&lexed.tokens);
         assert!(parsed.errors.is_empty(), "Parser errors: {:?}", parsed.errors);
-        first_pass(&parsed.lines)
+        first_pass(parsed.lines)
     }
 
     #[test]

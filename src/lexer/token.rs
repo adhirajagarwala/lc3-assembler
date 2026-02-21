@@ -136,13 +136,16 @@ impl BrFlags {
 
 impl std::fmt::Display for BrFlags {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let flags = format!(
-            "{}{}{}",
-            if self.n { "n" } else { "" },
-            if self.z { "z" } else { "" },
-            if self.p { "p" } else { "" }
-        );
-        write!(f, "{}", flags)
+        if self.n {
+            f.write_str("n")?;
+        }
+        if self.z {
+            f.write_str("z")?;
+        }
+        if self.p {
+            f.write_str("p")?;
+        }
+        Ok(())
     }
 }
 

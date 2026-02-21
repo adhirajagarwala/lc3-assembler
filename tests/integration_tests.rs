@@ -27,22 +27,9 @@ fn run_pipeline(path: &str) -> lc3_assembler::first_pass::FirstPassResult {
 }
 
 /// Run the full pipeline (lexer → parser → first pass → encoder), asserting no errors.
+/// Reuses `run_pipeline` for the first three stages, then adds encoding.
 fn run_full_pipeline(path: &str) -> lc3_assembler::encoder::EncodeResult {
-    let source = fs::read_to_string(path).expect("Failed to read test program");
-    let lexed = tokenize(&source);
-    assert!(lexed.errors.is_empty(), "Lexer errors: {:?}", lexed.errors);
-    let parsed = parse_lines(&lexed.tokens);
-    assert!(
-        parsed.errors.is_empty(),
-        "Parser errors: {:?}",
-        parsed.errors
-    );
-    let first = first_pass(parsed.lines);
-    assert!(
-        first.errors.is_empty(),
-        "First pass errors: {:?}",
-        first.errors
-    );
+    let first = run_pipeline(path);
     let encoded = encode(&first);
     assert!(
         encoded.errors.is_empty(),
@@ -66,7 +53,6 @@ fn collect_all_errors(source: &str) -> Vec<ErrorKind> {
     kinds
 }
 
-// TODO-LOW: Consider parameterized test macro to reduce duplication across integration tests
 #[test]
 fn hello_program() {
     let result = run_pipeline("tests/test_programs/hello.asm");

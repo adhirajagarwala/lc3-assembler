@@ -22,6 +22,9 @@
 
 pub mod symbol_table;
 
+#[cfg(test)]
+mod tests;
+
 use crate::error::{AsmError, ErrorKind, Span};
 use crate::parser::ast::{LineContent, SourceLine};
 use symbol_table::SymbolTable;

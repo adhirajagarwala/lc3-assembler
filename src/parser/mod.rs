@@ -27,6 +27,9 @@
 mod macros;
 pub mod ast;
 
+#[cfg(test)]
+mod tests;
+
 use crate::error::{AsmError, ErrorKind, Span};
 use crate::lexer::token::{Token, TokenKind};
 use ast::{Instruction, LineContent, SourceLine};
@@ -40,24 +43,21 @@ pub struct ParseResult {
 pub fn parse_lines(tokens: &[Token]) -> ParseResult {
     let mut lines = Vec::new();
     let mut errors = Vec::new();
-    let mut current: Vec<Token> = Vec::new();
+    let mut line_start = 0;
     let mut line_number = 1;
 
-    for token in tokens {
+    for (i, token) in tokens.iter().enumerate() {
         match token.kind {
             TokenKind::Newline => {
-                process_line(&current, line_number, &mut lines, &mut errors);
-                current.clear();
+                process_line(&tokens[line_start..i], line_number, &mut lines, &mut errors);
+                line_start = i + 1;
                 line_number += 1;
             }
             TokenKind::Eof => {
-                process_line(&current, line_number, &mut lines, &mut errors);
+                process_line(&tokens[line_start..i], line_number, &mut lines, &mut errors);
                 break;
             }
-            // TODO-MED: Refactor to use &[Token] slices instead of cloning every token.
-            // The parser only needs read access; splitting tokens by Newline/Eof indexes
-            // and passing sub-slices would eliminate one clone per token.
-            _ => current.push(token.clone()),
+            _ => {}
         }
     }
 

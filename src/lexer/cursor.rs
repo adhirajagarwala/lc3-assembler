@@ -1,84 +1,77 @@
 //! # Cursor
 //!
-//! Provides character-by-character navigation through source code with position tracking.
+//! Provides byte-by-byte navigation through LC-3 assembly source code with
+//! position tracking.
 //!
-//! The cursor maintains both character position and byte offset to support proper
-//! Unicode handling and accurate error reporting.
+//! LC-3 assembly is strictly ASCII, so the cursor operates on a byte slice
+//! (`&[u8]`) rather than `Vec<char>`. This eliminates the per-source
+//! allocation that `.chars().collect()` required and removes the redundant
+//! `byte_offset` field since `pos == byte_offset` for ASCII input.
 
 use crate::error::Span;
 
-/// A cursor for iterating through source code characters
+/// A cursor for iterating through source code bytes
 ///
 /// Tracks position in multiple ways:
-/// - Character index (for Unicode correctness)
-/// - Byte offset (for span creation)
+/// - Byte position (doubles as character index for ASCII)
 /// - Line and column numbers (for error messages)
-pub struct Cursor {
-    // TODO-MED: LC-3 source is ASCII-only. Replace Vec<char> with a byte-slice
-    // (`&[u8]`) to avoid the per-character allocation from `.chars().collect()`.
-    // This would also eliminate the separate `byte_offset` field since pos == byte offset.
-    /// All characters in the source
-    chars: Vec<char>,
-    /// Current character index
+pub struct Cursor<'a> {
+    /// Source bytes (ASCII-only)
+    bytes: &'a [u8],
+    /// Current byte position (also the byte offset for spans)
     pos: usize,
     /// Current line number (1-indexed)
     line: usize,
     /// Current column number (1-indexed)
     col: usize,
-    /// Current byte offset in original string
-    byte_offset: usize,
 }
 
-impl Cursor {
-    pub fn new(source: &str) -> Self {
+impl<'a> Cursor<'a> {
+    pub fn new(source: &'a str) -> Self {
         Self {
-            chars: source.chars().collect(),
+            bytes: source.as_bytes(),
             pos: 0,
             line: 1,
             col: 1,
-            byte_offset: 0,
         }
     }
 
     pub fn peek(&self) -> Option<char> {
-        self.chars.get(self.pos).copied()
+        self.bytes.get(self.pos).map(|&b| b as char)
     }
 
-    // peek_next() was removed — it was defined but never called anywhere in the codebase.
-
-    /// Advance to the next character and return it
+    /// Advance to the next byte and return it as a `char`.
     ///
     /// Updates line/column tracking:
     /// - '\n' increments line, resets column to 1
     /// - Other chars increment column
     pub fn advance(&mut self) -> Option<char> {
-        if let Some(ch) = self.chars.get(self.pos).copied() {
+        if let Some(&b) = self.bytes.get(self.pos) {
             self.pos += 1;
-            self.byte_offset += ch.len_utf8();
-            if ch == '\n' {
+            if b == b'\n' {
                 self.line += 1;
                 self.col = 1;
             } else {
                 self.col += 1;
             }
-            Some(ch)
+            Some(b as char)
         } else {
             None
         }
     }
 
     pub fn is_at_end(&self) -> bool {
-        self.pos >= self.chars.len()
+        self.pos >= self.bytes.len()
     }
 
     pub fn current_pos(&self) -> (usize, usize, usize) {
-        (self.byte_offset, self.line, self.col)
+        (self.pos, self.line, self.col)
     }
 
     pub fn make_span(&self, start_byte: usize, start_line: usize, start_col: usize) -> Span {
         Span {
             start: start_byte,
-            end: self.byte_offset,
+            end: self.pos,
             line: start_line,
             col: start_col,
         }

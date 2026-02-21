@@ -11,11 +11,13 @@
 //! - **Consistency**: All instructions with the same pattern are parsed identically
 //! - **Maintainability**: Fixing a bug in the pattern fixes it for all instructions
 //! - **Readability**: The main parser file is much cleaner and easier to understand
-
-// TODO-LOW: The `format!()` calls in macro error messages (e.g. "ADD first operand...")
-// allocate a String on every invocation, even though the instruction name ($name) is a
-// compile-time literal. Replace with `concat!` where possible, or pass &'static str
-// error messages to avoid per-call heap allocation on the error path.
+//!
+//! ## Error Messages
+//!
+//! All macro parameters use `$name:literal` so that `concat!` can produce
+//! `&'static str` error messages at compile time, avoiding per-call heap
+//! allocation on the error path. Only messages that interpolate runtime values
+//! (e.g. the actual out-of-range immediate) still use `format!`.
 
 /// Macro to generate parsers for reg-reg-or-imm instructions (ADD, AND)
 ///
@@ -23,7 +25,7 @@
 /// - Register mode: `ADD R1, R2, R3` (add R2 and R3, store in R1)
 /// - Immediate mode: `ADD R1, R2, #5` (add R2 and 5, store in R1)
 macro_rules! parse_reg_reg_or_imm {
-    ($name:expr, $reg_variant:expr, $imm_variant:expr) => {
+    ($name:literal, $reg_variant:expr, $imm_variant:expr) => {
         |tokens: &[&$crate::lexer::token::Token]| -> Result<$crate::parser::ast::LineContent, $crate::error::AsmError> {
             use $crate::error::{AsmError, ErrorKind};
             use $crate::parser::ast::LineContent;
@@ -31,14 +33,14 @@ macro_rules! parse_reg_reg_or_imm {
             if tokens.len() < 6 {
                 return Err(AsmError {
                     kind: ErrorKind::TooFewOperands,
-                    message: format!("{} requires 3 operands: {} DR, SR1, SR2/imm5", $name, $name),
+                    message: concat!($name, " requires 3 operands: ", $name, " DR, SR1, SR2/imm5").into(),
                     span: tokens[0].span,
                 });
             }
             $crate::parser::macros::expect_comma(tokens, 2, "Expected comma after first operand")?;
             $crate::parser::macros::expect_comma(tokens, 4, "Expected comma after second operand")?;
-            let dr = $crate::parser::macros::expect_register(tokens, 1, &format!("{} first operand must be a register (R0-R7)", $name))?;
-            let sr1 = $crate::parser::macros::expect_register(tokens, 3, &format!("{} second operand must be a register (R0-R7)", $name))?;
+            let dr = $crate::parser::macros::expect_register(tokens, 1, concat!($name, " first operand must be a register (R0-R7)"))?;
+            let sr1 = $crate::parser::macros::expect_register(tokens, 3, concat!($name, " second operand must be a register (R0-R7)"))?;
 
             if let Some(sr2) = $crate::parser::macros::token_to_register(tokens[5]) {
                 $crate::parser::macros::ensure_no_extra(tokens, 6)?;
@@ -61,7 +63,7 @@ macro_rules! parse_reg_reg_or_imm {
             } else {
                 Err(AsmError {
                     kind: ErrorKind::InvalidOperandType,
-                    message: format!("{} third operand must be a register (R0-R7) or immediate (#n)", $name),
+                    message: concat!($name, " third operand must be a register (R0-R7) or immediate (#n)").into(),
                     span: tokens[5].span,
                 })
             }
@@ -71,7 +73,7 @@ macro_rules! parse_reg_reg_or_imm {
 
 /// Macro to generate parsers for reg-label instructions (LD, LDI, LEA, ST, STI)
 macro_rules! parse_reg_label {
-    ($name:expr, $variant:expr) => {
+    ($name:literal, $variant:expr) => {
         |tokens: &[&$crate::lexer::token::Token]| -> Result<$crate::parser::ast::LineContent, $crate::error::AsmError> {
             use $crate::error::{AsmError, ErrorKind};
             use $crate::parser::ast::LineContent;
@@ -79,13 +81,13 @@ macro_rules! parse_reg_label {
             if tokens.len() < 4 {
                 return Err(AsmError {
                     kind: ErrorKind::TooFewOperands,
-                    message: format!("{} requires 2 operands: {} DR, LABEL", $name, $name),
+                    message: concat!($name, " requires 2 operands: ", $name, " DR, LABEL").into(),
                     span: tokens[0].span,
                 });
             }
             $crate::parser::macros::expect_comma(tokens, 2, "Expected comma after first operand")?;
-            let reg = $crate::parser::macros::expect_register(tokens, 1, &format!("{} first operand must be a register (R0-R7)", $name))?;
-            let label = $crate::parser::macros::expect_label(tokens, 3, &format!("{} requires a label operand", $name))?;
+            let reg = $crate::parser::macros::expect_register(tokens, 1, concat!($name, " first operand must be a register (R0-R7)"))?;
+            let label = $crate::parser::macros::expect_label(tokens, 3, concat!($name, " requires a label operand"))?;
             $crate::parser::macros::ensure_no_extra(tokens, 4)?;
             Ok(LineContent::Instruction($variant(reg, label)))
         }
@@ -94,7 +96,7 @@ macro_rules! parse_reg_label {
 
 /// Macro to generate parsers for reg-reg-imm instructions (LDR, STR)
 macro_rules! parse_reg_reg_imm {
-    ($name:expr, $variant:expr) => {
+    ($name:literal, $variant:expr) => {
         |tokens: &[&$crate::lexer::token::Token]| -> Result<$crate::parser::ast::LineContent, $crate::error::AsmError> {
             use $crate::error::{AsmError, ErrorKind};
             use $crate::parser::ast::LineContent;
@@ -102,17 +104,17 @@ macro_rules! parse_reg_reg_imm {
             if tokens.len() < 6 {
                 return Err(AsmError {
                     kind: ErrorKind::TooFewOperands,
-                    message: format!("{} requires 3 operands: {} DR, BaseR, #offset6", $name, $name),
+                    message: concat!($name, " requires 3 operands: ", $name, " DR, BaseR, #offset6").into(),
                     span: tokens[0].span,
                 });
             }
             $crate::parser::macros::expect_comma(tokens, 2, "Expected comma after first operand")?;
             $crate::parser::macros::expect_comma(tokens, 4, "Expected comma after second operand")?;
-            let r1 = $crate::parser::macros::expect_register(tokens, 1, &format!("{} first operand must be a register (R0-R7)", $name))?;
-            let r2 = $crate::parser::macros::expect_register(tokens, 3, &format!("{} second operand must be a register (R0-R7)", $name))?;
+            let r1 = $crate::parser::macros::expect_register(tokens, 1, concat!($name, " first operand must be a register (R0-R7)"))?;
+            let r2 = $crate::parser::macros::expect_register(tokens, 3, concat!($name, " second operand must be a register (R0-R7)"))?;
             let value = $crate::parser::macros::token_to_i32(tokens[5]).ok_or_else(|| AsmError {
                 kind: ErrorKind::InvalidOperandType,
-                message: format!("{} third operand must be an immediate (#n)", $name),
+                message: concat!($name, " third operand must be an immediate (#n)").into(),
                 span: tokens[5].span,
             })?;
             // Validate the 6-bit signed offset range (-32..=31).
@@ -135,7 +137,7 @@ macro_rules! parse_reg_reg_imm {
 
 /// Macro to generate parsers for single-register instructions (JMP, JSRR)
 macro_rules! parse_single_reg {
-    ($name:expr, $variant:expr) => {
+    ($name:literal, $variant:expr) => {
         |tokens: &[&$crate::lexer::token::Token]| -> Result<$crate::parser::ast::LineContent, $crate::error::AsmError> {
             use $crate::error::{AsmError, ErrorKind};
             use $crate::parser::ast::LineContent;
@@ -143,11 +145,11 @@ macro_rules! parse_single_reg {
             if tokens.len() < 2 {
                 return Err(AsmError {
                     kind: ErrorKind::TooFewOperands,
-                    message: format!("{} requires 1 operand: {} BaseR", $name, $name),
+                    message: concat!($name, " requires 1 operand: ", $name, " BaseR").into(),
                     span: tokens[0].span,
                 });
             }
-            let base_r = $crate::parser::macros::expect_register(tokens, 1, &format!("{} operand must be a register (R0-R7)", $name))?;
+            let base_r = $crate::parser::macros::expect_register(tokens, 1, concat!($name, " operand must be a register (R0-R7)"))?;
             $crate::parser::macros::ensure_no_extra(tokens, 2)?;
             Ok(LineContent::Instruction($variant(base_r)))
         }
@@ -156,7 +158,7 @@ macro_rules! parse_single_reg {
 
 /// Macro to generate parsers for single-label instructions (JSR)
 macro_rules! parse_single_label {
-    ($name:expr, $variant:expr) => {
+    ($name:literal, $variant:expr) => {
         |tokens: &[&$crate::lexer::token::Token]| -> Result<$crate::parser::ast::LineContent, $crate::error::AsmError> {
             use $crate::error::{AsmError, ErrorKind};
             use $crate::parser::ast::LineContent;
@@ -164,11 +166,11 @@ macro_rules! parse_single_label {
             if tokens.len() < 2 {
                 return Err(AsmError {
                     kind: ErrorKind::TooFewOperands,
-                    message: format!("{} requires 1 operand: {} LABEL", $name, $name),
+                    message: concat!($name, " requires 1 operand: ", $name, " LABEL").into(),
                     span: tokens[0].span,
                 });
             }
-            let label = $crate::parser::macros::expect_label(tokens, 1, &format!("{} requires a label operand", $name))?;
+            let label = $crate::parser::macros::expect_label(tokens, 1, concat!($name, " requires a label operand"))?;
             $crate::parser::macros::ensure_no_extra(tokens, 2)?;
             Ok(LineContent::Instruction($variant(label)))
         }
@@ -177,7 +179,7 @@ macro_rules! parse_single_label {
 
 /// Macro to generate parsers for no-operand instructions (RTI, RET, GETC, etc.)
 macro_rules! parse_no_operands {
-    ($name:expr, $variant:expr) => {
+    ($name:literal, $variant:expr) => {
         |tokens: &[&$crate::lexer::token::Token]| -> Result<$crate::parser::ast::LineContent, $crate::error::AsmError> {
             use $crate::error::{AsmError, ErrorKind};
             use $crate::parser::ast::LineContent;
@@ -185,7 +187,7 @@ macro_rules! parse_no_operands {
             if tokens.len() > 1 {
                 return Err(AsmError {
                     kind: ErrorKind::TooManyOperands,
-                    message: format!("{} takes no operands", $name),
+                    message: concat!($name, " takes no operands").into(),
                     span: tokens[1].span,
                 });
             }

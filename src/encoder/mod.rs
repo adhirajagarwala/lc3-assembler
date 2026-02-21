@@ -301,11 +301,691 @@ const fn sign_extend(value: i16, bits: u8) -> u16 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::first_pass::symbol_table::SymbolTable;
+    use crate::lexer::token::BrFlags;
+
+    // ---------------------------------------------------------------
+    // Helpers
+    // ---------------------------------------------------------------
+
+    const DUMMY_SPAN: Span = Span {
+        start: 0,
+        end: 0,
+        line: 1,
+        col: 1,
+    };
+
+    /// Build a minimal `FirstPassResult` from an origin address, a list of
+    /// `LineContent` items, and a symbol table.  Every line gets a dummy span
+    /// and no label — the encoder doesn't inspect those fields.
+    fn build_first_pass(
+        orig: u16,
+        contents: Vec<LineContent>,
+        symbols: SymbolTable,
+    ) -> FirstPassResult {
+        let mut lines = vec![SourceLine {
+            label: None,
+            content: LineContent::Orig(orig),
+            line_number: 1,
+            span: DUMMY_SPAN,
+        }];
+        for (i, c) in contents.into_iter().enumerate() {
+            lines.push(SourceLine {
+                label: None,
+                content: c,
+                line_number: i + 2,
+                span: DUMMY_SPAN,
+            });
+        }
+        FirstPassResult {
+            symbol_table: symbols,
+            source_lines: lines,
+            orig_address: orig,
+            errors: Vec::new(),
+        }
+    }
+
+    /// Encode a single instruction at origin 0x3000 with no symbols needed.
+    fn encode_single(inst: Instruction) -> u16 {
+        let fp = build_first_pass(
+            0x3000,
+            vec![LineContent::Instruction(inst)],
+            SymbolTable::new(),
+        );
+        let result = encode(&fp);
+        assert!(
+            result.errors.is_empty(),
+            "unexpected errors: {:?}",
+            result.errors
+        );
+        assert_eq!(result.machine_code.len(), 1);
+        result.machine_code[0]
+    }
+
+    fn symbols_with_target(label: &str, addr: u16) -> SymbolTable {
+        let mut st = SymbolTable::new();
+        st.insert(label.to_string(), addr);
+        st
+    }
+
+    // ---------------------------------------------------------------
+    // sign_extend
+    // ---------------------------------------------------------------
 
     #[test]
     fn test_sign_extend() {
         assert_eq!(sign_extend(5, 5), 0b00101);
         assert_eq!(sign_extend(-1, 5), 0b11111);
         assert_eq!(sign_extend(-16, 5), 0b10000);
+    }
+
+    #[test]
+    fn test_sign_extend_6bit() {
+        assert_eq!(sign_extend(31, 6), 0b011111);
+        assert_eq!(sign_extend(-32, 6), 0b100000);
+        assert_eq!(sign_extend(-1, 6), 0b111111);
+    }
+
+    // ---------------------------------------------------------------
+    // Operate instructions: ADD, AND, NOT
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn encode_add_reg() {
+        // ADD R2, R3, R4  →  0001 010 011 000 100 = 0x14C4
+        let word = encode_single(Instruction::AddReg {
+            dr: 2,
+            sr1: 3,
+            sr2: 4,
+        });
+        assert_eq!(word, 0x14C4);
+    }
+
+    #[test]
+    fn encode_add_imm_positive() {
+        // ADD R1, R1, #5  →  0001 001 001 1 00101 = 0x1265
+        let word = encode_single(Instruction::AddImm {
+            dr: 1,
+            sr1: 1,
+            imm5: 5,
+        });
+        assert_eq!(word, 0x1265);
+    }
+
+    #[test]
+    fn encode_add_imm_negative() {
+        // ADD R0, R0, #-1  →  0001 000 000 1 11111 = 0x103F
+        let word = encode_single(Instruction::AddImm {
+            dr: 0,
+            sr1: 0,
+            imm5: -1,
+        });
+        assert_eq!(word, 0x103F);
+    }
+
+    #[test]
+    fn encode_and_reg() {
+        // AND R5, R6, R7  →  0101 101 110 000 111 = 0x5B87
+        let word = encode_single(Instruction::AndReg {
+            dr: 5,
+            sr1: 6,
+            sr2: 7,
+        });
+        assert_eq!(word, 0x5B87);
+    }
+
+    #[test]
+    fn encode_and_imm() {
+        // AND R0, R0, #0  →  0101 000 000 1 00000 = 0x5020
+        let word = encode_single(Instruction::AndImm {
+            dr: 0,
+            sr1: 0,
+            imm5: 0,
+        });
+        assert_eq!(word, 0x5020);
+    }
+
+    #[test]
+    fn encode_not() {
+        // NOT R4, R5  →  1001 100 101 111111 = 0x997F
+        let word = encode_single(Instruction::Not { dr: 4, sr: 5 });
+        assert_eq!(word, 0x997F);
+    }
+
+    // ---------------------------------------------------------------
+    // Data movement with base+offset: LDR, STR
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn encode_ldr() {
+        // LDR R2, R3, #5  →  0110 010 011 000101 = 0x64C5
+        let word = encode_single(Instruction::Ldr {
+            dr: 2,
+            base_r: 3,
+            offset6: 5,
+        });
+        assert_eq!(word, 0x64C5);
+    }
+
+    #[test]
+    fn encode_ldr_negative_offset() {
+        // LDR R0, R1, #-1  →  0110 000 001 111111 = 0x607F
+        let word = encode_single(Instruction::Ldr {
+            dr: 0,
+            base_r: 1,
+            offset6: -1,
+        });
+        assert_eq!(word, 0x607F);
+    }
+
+    #[test]
+    fn encode_str() {
+        // STR R7, R6, #0  →  0111 111 110 000000 = 0x7F80
+        let word = encode_single(Instruction::Str {
+            sr: 7,
+            base_r: 6,
+            offset6: 0,
+        });
+        assert_eq!(word, 0x7F80);
+    }
+
+    // ---------------------------------------------------------------
+    // Data movement with PC offset: LD, LDI, LEA, ST, STI
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn encode_ld() {
+        // LD R3, TARGET (TARGET=0x3005, inst at 0x3000, PC=0x3001, offset=4)
+        // 0010 011 000000100 = 0x2604
+        let st = symbols_with_target("TARGET", 0x3005);
+        let fp = build_first_pass(
+            0x3000,
+            vec![LineContent::Instruction(Instruction::Ld {
+                dr: 3,
+                label: "TARGET".into(),
+            })],
+            st,
+        );
+        let result = encode(&fp);
+        assert!(result.errors.is_empty());
+        assert_eq!(result.machine_code[0], 0x2604);
+    }
+
+    #[test]
+    fn encode_ldi() {
+        // LDI R0, PTR (PTR=0x3003, inst at 0x3000, offset=2)
+        // 1010 000 000000010 = 0xA002
+        let st = symbols_with_target("PTR", 0x3003);
+        let fp = build_first_pass(
+            0x3000,
+            vec![LineContent::Instruction(Instruction::Ldi {
+                dr: 0,
+                label: "PTR".into(),
+            })],
+            st,
+        );
+        let result = encode(&fp);
+        assert!(result.errors.is_empty());
+        assert_eq!(result.machine_code[0], 0xA002);
+    }
+
+    #[test]
+    fn encode_lea() {
+        // LEA R7, MSG (MSG=0x3002, inst at 0x3000, offset=1)
+        // 1110 111 000000001 = 0xEE01
+        let st = symbols_with_target("MSG", 0x3002);
+        let fp = build_first_pass(
+            0x3000,
+            vec![LineContent::Instruction(Instruction::Lea {
+                dr: 7,
+                label: "MSG".into(),
+            })],
+            st,
+        );
+        let result = encode(&fp);
+        assert!(result.errors.is_empty());
+        assert_eq!(result.machine_code[0], 0xEE01);
+    }
+
+    #[test]
+    fn encode_st() {
+        // ST R2, DATA (DATA=0x3004, inst at 0x3000, offset=3)
+        // 0011 010 000000011 = 0x3403
+        let st = symbols_with_target("DATA", 0x3004);
+        let fp = build_first_pass(
+            0x3000,
+            vec![LineContent::Instruction(Instruction::St {
+                sr: 2,
+                label: "DATA".into(),
+            })],
+            st,
+        );
+        let result = encode(&fp);
+        assert!(result.errors.is_empty());
+        assert_eq!(result.machine_code[0], 0x3403);
+    }
+
+    #[test]
+    fn encode_sti() {
+        // STI R1, PTR (PTR=0x3002, inst at 0x3000, offset=1)
+        // 1011 001 000000001 = 0xB201
+        let st = symbols_with_target("PTR", 0x3002);
+        let fp = build_first_pass(
+            0x3000,
+            vec![LineContent::Instruction(Instruction::Sti {
+                sr: 1,
+                label: "PTR".into(),
+            })],
+            st,
+        );
+        let result = encode(&fp);
+        assert!(result.errors.is_empty());
+        assert_eq!(result.machine_code[0], 0xB201);
+    }
+
+    // ---------------------------------------------------------------
+    // Control flow: BR, JMP, RET, JSR, JSRR, RTI
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn encode_br_nzp() {
+        // BRnzp LOOP (LOOP=0x3000, inst at 0x3000, offset=-1)
+        // 0000 111 111111111 = 0x0FFF
+        let st = symbols_with_target("LOOP", 0x3000);
+        let fp = build_first_pass(
+            0x3000,
+            vec![LineContent::Instruction(Instruction::Br {
+                flags: BrFlags::new(true, true, true),
+                label: "LOOP".into(),
+            })],
+            st,
+        );
+        let result = encode(&fp);
+        assert!(result.errors.is_empty());
+        assert_eq!(result.machine_code[0], 0x0FFF);
+    }
+
+    #[test]
+    fn encode_brn() {
+        // BRn BACK (BACK=0x2FFF, inst at 0x3000, offset=-2)
+        // 0000 100 111111110 = 0x09FE
+        let st = symbols_with_target("BACK", 0x2FFF);
+        let fp = build_first_pass(
+            0x3000,
+            vec![LineContent::Instruction(Instruction::Br {
+                flags: BrFlags::new(true, false, false),
+                label: "BACK".into(),
+            })],
+            st,
+        );
+        let result = encode(&fp);
+        assert!(result.errors.is_empty());
+        assert_eq!(result.machine_code[0], 0x09FE);
+    }
+
+    #[test]
+    fn encode_brzp() {
+        // BRzp FWD (FWD=0x3005, inst at 0x3000, offset=4)
+        // 0000 011 000000100 = 0x0604
+        let st = symbols_with_target("FWD", 0x3005);
+        let fp = build_first_pass(
+            0x3000,
+            vec![LineContent::Instruction(Instruction::Br {
+                flags: BrFlags::new(false, true, true),
+                label: "FWD".into(),
+            })],
+            st,
+        );
+        let result = encode(&fp);
+        assert!(result.errors.is_empty());
+        assert_eq!(result.machine_code[0], 0x0604);
+    }
+
+    #[test]
+    fn encode_jmp() {
+        // JMP R3  →  1100 000 011 000000 = 0xC0C0
+        let word = encode_single(Instruction::Jmp { base_r: 3 });
+        assert_eq!(word, 0xC0C0);
+    }
+
+    #[test]
+    fn encode_ret() {
+        // RET = JMP R7  →  1100 000 111 000000 = 0xC1C0
+        let word = encode_single(Instruction::Ret);
+        assert_eq!(word, 0xC1C0);
+    }
+
+    #[test]
+    fn encode_jsr() {
+        // JSR SUB (SUB=0x3100, inst at 0x3000, PC=0x3001, offset=0xFF)
+        // 0100 1 00011111111 = 0x48FF
+        let st = symbols_with_target("SUB", 0x3100);
+        let fp = build_first_pass(
+            0x3000,
+            vec![LineContent::Instruction(Instruction::Jsr {
+                label: "SUB".into(),
+            })],
+            st,
+        );
+        let result = encode(&fp);
+        assert!(result.errors.is_empty());
+        assert_eq!(result.machine_code[0], 0x48FF);
+    }
+
+    #[test]
+    fn encode_jsrr() {
+        // JSRR R4  →  0100 0 00 100 000000 = 0x4100
+        let word = encode_single(Instruction::Jsrr { base_r: 4 });
+        assert_eq!(word, 0x4100);
+    }
+
+    #[test]
+    fn encode_rti() {
+        // RTI  →  1000 000000000000 = 0x8000
+        let word = encode_single(Instruction::Rti);
+        assert_eq!(word, 0x8000);
+    }
+
+    // ---------------------------------------------------------------
+    // Trap instructions and aliases
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn encode_trap() {
+        // TRAP x25  →  1111 0000 00100101 = 0xF025
+        let word = encode_single(Instruction::Trap { trapvect8: 0x25 });
+        assert_eq!(word, 0xF025);
+    }
+
+    #[test]
+    fn encode_trap_aliases() {
+        assert_eq!(encode_single(Instruction::Getc), 0xF020);
+        assert_eq!(encode_single(Instruction::Out), 0xF021);
+        assert_eq!(encode_single(Instruction::Puts), 0xF022);
+        assert_eq!(encode_single(Instruction::In), 0xF023);
+        assert_eq!(encode_single(Instruction::Putsp), 0xF024);
+        assert_eq!(encode_single(Instruction::Halt), 0xF025);
+    }
+
+    // ---------------------------------------------------------------
+    // Directives: .FILL, .BLKW, .STRINGZ
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn encode_fill_immediate() {
+        let fp = build_first_pass(
+            0x3000,
+            vec![LineContent::FillImmediate(42)],
+            SymbolTable::new(),
+        );
+        let result = encode(&fp);
+        assert!(result.errors.is_empty());
+        assert_eq!(result.machine_code, vec![42]);
+    }
+
+    #[test]
+    fn encode_fill_negative() {
+        // .FILL #-1  →  stored as 0xFFFF (i32 -1 cast to u16)
+        let fp = build_first_pass(
+            0x3000,
+            vec![LineContent::FillImmediate(-1)],
+            SymbolTable::new(),
+        );
+        let result = encode(&fp);
+        assert!(result.errors.is_empty());
+        assert_eq!(result.machine_code, vec![0xFFFF]);
+    }
+
+    #[test]
+    fn encode_fill_label() {
+        let st = symbols_with_target("DATA", 0x4000);
+        let fp = build_first_pass(0x3000, vec![LineContent::FillLabel("DATA".into())], st);
+        let result = encode(&fp);
+        assert!(result.errors.is_empty());
+        assert_eq!(result.machine_code, vec![0x4000]);
+    }
+
+    #[test]
+    fn encode_blkw() {
+        let fp = build_first_pass(0x3000, vec![LineContent::Blkw(5)], SymbolTable::new());
+        let result = encode(&fp);
+        assert!(result.errors.is_empty());
+        assert_eq!(result.machine_code, vec![0, 0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn encode_stringz() {
+        // .STRINGZ "Hi" → 'H'=0x48, 'i'=0x69, null=0x00
+        let fp = build_first_pass(
+            0x3000,
+            vec![LineContent::Stringz("Hi".into())],
+            SymbolTable::new(),
+        );
+        let result = encode(&fp);
+        assert!(result.errors.is_empty());
+        assert_eq!(result.machine_code, vec![0x48, 0x69, 0x00]);
+    }
+
+    #[test]
+    fn encode_stringz_empty() {
+        // .STRINGZ "" → just null terminator
+        let fp = build_first_pass(
+            0x3000,
+            vec![LineContent::Stringz(String::new())],
+            SymbolTable::new(),
+        );
+        let result = encode(&fp);
+        assert!(result.errors.is_empty());
+        assert_eq!(result.machine_code, vec![0x00]);
+    }
+
+    // ---------------------------------------------------------------
+    // PC offset edge cases
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn pc_offset_max_positive_9bit() {
+        // 9-bit signed max = +255. inst at 0x3000, PC=0x3001, target=0x3100
+        // offset = 0x3100 - 0x3001 = 0xFF = 255
+        let st = symbols_with_target("FAR", 0x3100);
+        let fp = build_first_pass(
+            0x3000,
+            vec![LineContent::Instruction(Instruction::Ld {
+                dr: 0,
+                label: "FAR".into(),
+            })],
+            st,
+        );
+        let result = encode(&fp);
+        assert!(result.errors.is_empty());
+        assert_eq!(result.machine_code[0], 0x20FF);
+    }
+
+    #[test]
+    fn pc_offset_max_negative_9bit() {
+        // 9-bit signed min = -256. inst at 0x3100, PC=0x3101, target=0x3001
+        // offset = 0x3001 - 0x3101 = -256
+        let st = symbols_with_target("BACK", 0x3001);
+        let fp = build_first_pass(
+            0x3100,
+            vec![LineContent::Instruction(Instruction::Ld {
+                dr: 0,
+                label: "BACK".into(),
+            })],
+            st,
+        );
+        let result = encode(&fp);
+        assert!(result.errors.is_empty());
+        assert_eq!(result.machine_code[0], 0x2100);
+    }
+
+    #[test]
+    fn pc_offset_out_of_range_positive() {
+        // 9-bit max is +255. target at +256 → error.
+        let st = symbols_with_target("TOO_FAR", 0x3101);
+        let fp = build_first_pass(
+            0x3000,
+            vec![LineContent::Instruction(Instruction::Ld {
+                dr: 0,
+                label: "TOO_FAR".into(),
+            })],
+            st,
+        );
+        let result = encode(&fp);
+        assert_eq!(result.errors.len(), 1);
+        assert_eq!(result.errors[0].kind, ErrorKind::OffsetOutOfRange);
+    }
+
+    #[test]
+    fn pc_offset_out_of_range_negative() {
+        // 9-bit min is -256. target at -257 → error.
+        let st = symbols_with_target("TOO_FAR_BACK", 0x3000);
+        let fp = build_first_pass(
+            0x3100,
+            vec![LineContent::Instruction(Instruction::Ld {
+                dr: 0,
+                label: "TOO_FAR_BACK".into(),
+            })],
+            st,
+        );
+        let result = encode(&fp);
+        assert_eq!(result.errors.len(), 1);
+        assert_eq!(result.errors[0].kind, ErrorKind::OffsetOutOfRange);
+    }
+
+    #[test]
+    fn pc_offset_jsr_11bit_max() {
+        // JSR 11-bit max = +1023. inst at 0x3000, PC=0x3001, target=0x3400
+        let st = symbols_with_target("FUNC", 0x3400);
+        let fp = build_first_pass(
+            0x3000,
+            vec![LineContent::Instruction(Instruction::Jsr {
+                label: "FUNC".into(),
+            })],
+            st,
+        );
+        let result = encode(&fp);
+        assert!(result.errors.is_empty());
+        assert_eq!(result.machine_code[0], 0x4BFF);
+    }
+
+    #[test]
+    fn pc_offset_jsr_out_of_range() {
+        // JSR 11-bit max is +1023. target=0x3401 → offset=1024 → error
+        let st = symbols_with_target("FUNC", 0x3401);
+        let fp = build_first_pass(
+            0x3000,
+            vec![LineContent::Instruction(Instruction::Jsr {
+                label: "FUNC".into(),
+            })],
+            st,
+        );
+        let result = encode(&fp);
+        assert_eq!(result.errors.len(), 1);
+        assert_eq!(result.errors[0].kind, ErrorKind::OffsetOutOfRange);
+    }
+
+    // ---------------------------------------------------------------
+    // Error paths
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn undefined_label_in_instruction() {
+        let fp = build_first_pass(
+            0x3000,
+            vec![LineContent::Instruction(Instruction::Ld {
+                dr: 0,
+                label: "MISSING".into(),
+            })],
+            SymbolTable::new(),
+        );
+        let result = encode(&fp);
+        assert_eq!(result.errors.len(), 1);
+        assert_eq!(result.errors[0].kind, ErrorKind::UndefinedLabel);
+        assert_eq!(result.machine_code.len(), 1); // still emits a word (0)
+    }
+
+    #[test]
+    fn undefined_label_in_fill() {
+        let fp = build_first_pass(
+            0x3000,
+            vec![LineContent::FillLabel("NOPE".into())],
+            SymbolTable::new(),
+        );
+        let result = encode(&fp);
+        assert_eq!(result.errors.len(), 1);
+        assert_eq!(result.errors[0].kind, ErrorKind::UndefinedLabel);
+        assert_eq!(result.machine_code, vec![0]);
+    }
+
+    // ---------------------------------------------------------------
+    // Address tracking (emit advances current_address correctly)
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn address_tracking_multi_instruction() {
+        // inst0=0x3000, inst1=0x3001, inst2=0x3002 (BR back to TOP=0x3000)
+        // BR PC=0x3003, offset = 0x3000 - 0x3003 = -3
+        let st = symbols_with_target("TOP", 0x3000);
+        let fp = build_first_pass(
+            0x3000,
+            vec![
+                LineContent::Instruction(Instruction::AddImm {
+                    dr: 0,
+                    sr1: 0,
+                    imm5: 1,
+                }),
+                LineContent::Instruction(Instruction::AddImm {
+                    dr: 1,
+                    sr1: 1,
+                    imm5: -1,
+                }),
+                LineContent::Instruction(Instruction::Br {
+                    flags: BrFlags::new(false, false, true),
+                    label: "TOP".into(),
+                }),
+            ],
+            st,
+        );
+        let result = encode(&fp);
+        assert!(result.errors.is_empty());
+        assert_eq!(result.machine_code.len(), 3);
+        // BRp offset=-3 → 0000 001 111111101 = 0x03FD
+        assert_eq!(result.machine_code[2], 0x03FD);
+    }
+
+    #[test]
+    fn address_tracking_blkw_affects_offset() {
+        // .BLKW 10 at 0x3000 → 10 words, then LD at 0x300A
+        // TARGET=0x3005, PC=0x300B, offset = 0x3005 - 0x300B = -6
+        let st = symbols_with_target("TARGET", 0x3005);
+        let fp = build_first_pass(
+            0x3000,
+            vec![
+                LineContent::Blkw(10),
+                LineContent::Instruction(Instruction::Ld {
+                    dr: 0,
+                    label: "TARGET".into(),
+                }),
+            ],
+            st,
+        );
+        let result = encode(&fp);
+        assert!(result.errors.is_empty());
+        assert_eq!(result.machine_code.len(), 11); // 10 zeros + 1 instruction
+                                                   // LD R0, offset=-6 → 0010 000 111111010 = 0x21FA
+        assert_eq!(result.machine_code[10], 0x21FA);
+    }
+
+    // ---------------------------------------------------------------
+    // orig_address propagation
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn orig_address_propagated() {
+        let fp = build_first_pass(0x4000, vec![], SymbolTable::new());
+        let result = encode(&fp);
+        assert_eq!(result.orig_address, 0x4000);
+        assert!(result.machine_code.is_empty());
     }
 }

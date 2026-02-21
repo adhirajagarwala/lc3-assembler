@@ -1,10 +1,11 @@
-use std::collections::HashMap;
-
-// TODO-LOW: Consider using BTreeMap instead of HashMap + Vec for automatic ordering without duplication
+/// Insertion-ordered symbol table mapping labels to addresses.
+///
+/// Uses a single `Vec<(String, u16)>` instead of the previous `HashMap + Vec`
+/// approach, eliminating string duplication. Lookups are O(n) linear scans,
+/// which is perfectly adequate for LC-3 programs (typically <50 labels).
 #[derive(Debug, Clone)]
 pub struct SymbolTable {
-    map: HashMap<String, u16>,
-    order: Vec<String>,
+    entries: Vec<(String, u16)>,
 }
 
 impl Default for SymbolTable {
@@ -16,57 +17,44 @@ impl Default for SymbolTable {
 impl SymbolTable {
     pub fn new() -> Self {
         Self {
-            map: HashMap::new(),
-            order: Vec::new(),
+            entries: Vec::new(),
         }
     }
 
     pub fn insert(&mut self, label: String, address: u16) {
-        use std::collections::hash_map::Entry;
-        // Entry API: single hash lookup instead of contains_key + insert (two lookups).
-        // On a new label (Vacant), clone the key to maintain insertion order in `order`.
-        // On an existing label (Occupied), just update the value without touching `order`.
-        match self.map.entry(label) {
-            Entry::Vacant(e) => {
-                self.order.push(e.key().clone());
-                e.insert(address);
-            }
-            Entry::Occupied(mut e) => {
-                *e.get_mut() = address;
-            }
+        // If the label already exists, update its address in place.
+        // Otherwise, append a new entry to preserve insertion order.
+        if let Some(entry) = self.entries.iter_mut().find(|(l, _)| l == &label) {
+            entry.1 = address;
+        } else {
+            self.entries.push((label, address));
         }
     }
 
     pub fn get(&self, label: &str) -> Option<u16> {
-        self.map.get(label).copied()
+        self.entries
+            .iter()
+            .find(|(l, _)| l == label)
+            .map(|(_, addr)| *addr)
     }
 
     pub fn len(&self) -> usize {
-        self.map.len()
+        self.entries.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.map.is_empty()
+        self.entries.is_empty()
     }
 
     pub fn print_table(&self) {
         println!("//\tSymbol Name\tAddress");
         println!("//\t-----------\t-------");
-        for label in &self.order {
-            let addr = self.map[label];
+        for (label, addr) in &self.entries {
             println!("//\t{}\t\tx{:04X}", label, addr);
         }
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (&str, u16)> {
-        self.order.iter().map(move |label| {
-            (
-                label.as_str(),
-                self.map
-                    .get(label)
-                    .copied()
-                    .expect("Label in order but not in map"),
-            )
-        })
+        self.entries.iter().map(|(l, a)| (l.as_str(), *a))
     }
 }

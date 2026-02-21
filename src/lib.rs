@@ -19,7 +19,7 @@
 //! let source = std::fs::read_to_string("program.asm").unwrap();
 //! let lexed = tokenize(&source);
 //! let parsed = parse_lines(&lexed.tokens);
-//! let first = first_pass(&parsed.lines);
+//! let first = first_pass(parsed.lines);  // takes ownership of parsed lines
 //! let encoded = encode(&first);
 //!
 //! // Check for errors at each stage

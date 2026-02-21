@@ -1,10 +1,12 @@
 use std::fs;
 
 use lc3_assembler::encoder::encode;
+use lc3_assembler::error::ErrorKind;
 use lc3_assembler::first_pass::first_pass;
 use lc3_assembler::lexer::tokenize;
 use lc3_assembler::parser::parse_lines;
 
+/// Run lexer → parser → first pass, asserting no errors at any stage.
 fn run_pipeline(path: &str) -> lc3_assembler::first_pass::FirstPassResult {
     let source = fs::read_to_string(path).expect("Failed to read test program");
     let lexed = tokenize(&source);
@@ -24,6 +26,7 @@ fn run_pipeline(path: &str) -> lc3_assembler::first_pass::FirstPassResult {
     result
 }
 
+/// Run the full pipeline (lexer → parser → first pass → encoder), asserting no errors.
 fn run_full_pipeline(path: &str) -> lc3_assembler::encoder::EncodeResult {
     let source = fs::read_to_string(path).expect("Failed to read test program");
     let lexed = tokenize(&source);
@@ -47,6 +50,20 @@ fn run_full_pipeline(path: &str) -> lc3_assembler::encoder::EncodeResult {
         encoded.errors
     );
     encoded
+}
+
+/// Run the pipeline on a source string and collect all errors from every stage.
+fn collect_all_errors(source: &str) -> Vec<ErrorKind> {
+    let mut kinds = Vec::new();
+    let lexed = tokenize(source);
+    kinds.extend(lexed.errors.iter().map(|e| e.kind.clone()));
+    let parsed = parse_lines(&lexed.tokens);
+    kinds.extend(parsed.errors.iter().map(|e| e.kind.clone()));
+    let first = first_pass(parsed.lines);
+    kinds.extend(first.errors.iter().map(|e| e.kind.clone()));
+    let encoded = encode(&first);
+    kinds.extend(encoded.errors.iter().map(|e| e.kind.clone()));
+    kinds
 }
 
 // TODO-LOW: Consider parameterized test macro to reduce duplication across integration tests
@@ -222,4 +239,155 @@ fn encode_preserves_orig_address() {
 
     let encoded2 = run_full_pipeline("tests/test_programs/all_instructions.asm");
     assert_eq!(encoded2.orig_address, 0x3000);
+}
+
+// ========== LOOP PROGRAM ==========
+
+#[test]
+fn loop_program() {
+    let result = run_pipeline("tests/test_programs/loop.asm");
+    assert_eq!(result.symbol_table.get("LOOP"), Some(0x3002));
+}
+
+#[test]
+fn encode_loop_program() {
+    let encoded = run_full_pipeline("tests/test_programs/loop.asm");
+    assert_eq!(encoded.orig_address, 0x3000);
+    // AND R1, R1, #0 → clear R1
+    assert_eq!(encoded.machine_code[0] >> 12, 0x5, "First should be AND");
+    // ADD R1, R1, #5
+    assert_eq!(encoded.machine_code[1] >> 12, 0x1, "Second should be ADD");
+    // ADD R1, R1, #-1  (loop body)
+    assert_eq!(encoded.machine_code[2] >> 12, 0x1, "Third should be ADD");
+    // BRp LOOP — branch back
+    assert_eq!(encoded.machine_code[3] >> 12, 0x0, "Fourth should be BR");
+    // HALT
+    assert_eq!(encoded.machine_code[4], 0xF025);
+}
+
+// ========== ERROR-PATH TESTS ==========
+
+#[test]
+fn error_undefined_label() {
+    let source = ".ORIG x3000\nLD R0, NOWHERE\n.END\n";
+    let errors = collect_all_errors(source);
+    assert!(
+        errors.contains(&ErrorKind::UndefinedLabel),
+        "Expected UndefinedLabel error, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn error_duplicate_label() {
+    let source = ".ORIG x3000\nFOO ADD R0, R0, #1\nFOO ADD R1, R1, #2\n.END\n";
+    let errors = collect_all_errors(source);
+    assert!(
+        errors.contains(&ErrorKind::DuplicateLabel),
+        "Expected DuplicateLabel error, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn error_missing_orig() {
+    let source = "ADD R0, R0, #1\n.END\n";
+    let errors = collect_all_errors(source);
+    assert!(
+        errors.contains(&ErrorKind::MissingOrig),
+        "Expected MissingOrig error, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn error_imm5_out_of_range() {
+    let source = ".ORIG x3000\nADD R1, R1, #100\n.END\n";
+    let errors = collect_all_errors(source);
+    assert!(
+        errors.contains(&ErrorKind::InvalidOperandType),
+        "Expected InvalidOperandType for imm5 out of range, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn error_offset6_out_of_range() {
+    let source = ".ORIG x3000\nLDR R0, R1, #100\n.END\n";
+    let errors = collect_all_errors(source);
+    assert!(
+        errors.contains(&ErrorKind::InvalidOperandType),
+        "Expected InvalidOperandType for offset6 out of range, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn error_too_few_operands() {
+    let source = ".ORIG x3000\nADD R1, R2\n.END\n";
+    let errors = collect_all_errors(source);
+    assert!(
+        errors.contains(&ErrorKind::TooFewOperands),
+        "Expected TooFewOperands error, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn error_invalid_orig_address() {
+    // x10000 overflows the lexer's 16-bit hex parser, so it's caught as InvalidHexLiteral
+    // before the parser ever sees it. This is correct: the lexer rejects it first.
+    let source = ".ORIG x10000\n.END\n";
+    let errors = collect_all_errors(source);
+    assert!(
+        errors.contains(&ErrorKind::InvalidHexLiteral),
+        "Expected InvalidHexLiteral for oversized hex literal, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn error_invalid_orig_decimal() {
+    // Decimal 70000 is parseable but exceeds the 16-bit .ORIG range.
+    let source = ".ORIG #70000\n.END\n";
+    let errors = collect_all_errors(source);
+    assert!(
+        errors.contains(&ErrorKind::InvalidOrigAddress),
+        "Expected InvalidOrigAddress for decimal out of range, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn error_invalid_blkw_count() {
+    let source = ".ORIG x3000\n.BLKW #0\n.END\n";
+    let errors = collect_all_errors(source);
+    assert!(
+        errors.contains(&ErrorKind::InvalidBlkwCount),
+        "Expected InvalidBlkwCount error, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn error_trap_vector_out_of_range() {
+    let source = ".ORIG x3000\nTRAP x1FF\n.END\n";
+    let errors = collect_all_errors(source);
+    assert!(
+        errors.contains(&ErrorKind::InvalidOperandType),
+        "Expected InvalidOperandType for TRAP vector out of range, got: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn errors_asm_file_produces_errors() {
+    // The errors.asm test program has intentional errors — verify the pipeline catches them.
+    let source =
+        fs::read_to_string("tests/test_programs/errors.asm").expect("Failed to read errors.asm");
+    let errors = collect_all_errors(&source);
+    assert!(
+        !errors.is_empty(),
+        "errors.asm should produce at least one error"
+    );
 }

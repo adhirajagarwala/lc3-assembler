@@ -22,7 +22,7 @@ fn main() {
 
     let input_file = &args[1];
     let source = fs::read_to_string(input_file).unwrap_or_else(|err| {
-        eprintln!("Error: Failed to read '{}': {}", input_file, err);
+        eprintln!("Error: Failed to read '{input_file}': {err}");
         std::process::exit(1);
     });
 
@@ -41,7 +41,7 @@ fn main() {
         .collect();
 
     for err in &all_errors {
-        eprintln!("{}", err);
+        eprintln!("{err}");
     }
 
     if !all_errors.is_empty() {
@@ -72,8 +72,8 @@ fn main() {
     match write_obj_file(&output_file, encoded.orig_address, &encoded.machine_code) {
         Ok(_) => {
             println!("\n\u{2705} Assembly successful!");
-            println!("   Input:  {}", input_file);
-            println!("   Output: {}", output_file);
+            println!("   Input:  {input_file}");
+            println!("   Output: {output_file}");
             println!("   Origin: 0x{:04X}", encoded.orig_address);
             println!(
                 "   Size:   {} words ({} bytes)",

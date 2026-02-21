@@ -58,7 +58,6 @@ fn process_escape_char(esc: char) -> Option<char> {
 
 #[must_use]
 pub fn tokenize(source: &str) -> LexResult {
-    // TODO-MED: Consider builder pattern for Token creation to avoid manual Span construction
     let mut cursor = Cursor::new(source);
     let mut tokens = Vec::new();
     let mut errors = Vec::new();
@@ -153,7 +152,7 @@ fn lex_comment(
     sl: usize,
     sc: usize,
 ) -> Result<Option<Token>, AsmError> {
-    cursor.advance();
+    cursor.advance(); // consume ';'
     let mut text = String::new();
     while let Some(ch) = cursor.peek() {
         if ch == '\n' || ch == '\r' {
@@ -163,7 +162,10 @@ fn lex_comment(
         text.push(ch);
     }
 
-    let lexeme = format!(";{}", text);
+    // Build lexeme by prepending ';' without format! overhead.
+    let mut lexeme = String::with_capacity(1 + text.len());
+    lexeme.push(';');
+    lexeme.push_str(&text);
     Ok(Some(Token {
         kind: TokenKind::Comment(text),
         lexeme,
@@ -364,7 +366,6 @@ fn lex_word(
         }
     }
 
-    // TODO-LOW: Consider using static HashMap or phf_map for opcode lookup instead of match
     let kind = match upper.as_str() {
         "ADD" => TokenKind::OpAdd,
         "AND" => TokenKind::OpAnd,

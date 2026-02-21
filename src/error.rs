@@ -106,6 +106,38 @@ pub enum ErrorKind {
     OffsetOutOfRange,
 }
 
+impl std::fmt::Display for ErrorKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Self::UnterminatedString => "unterminated string",
+            Self::InvalidEscapeSequence => "invalid escape sequence",
+            Self::InvalidDecimalLiteral => "invalid decimal literal",
+            Self::InvalidHexLiteral => "invalid hex literal",
+            Self::InvalidBinaryLiteral => "invalid binary literal",
+            Self::InvalidRegister => "invalid register",
+            Self::UnknownDirective => "unknown directive",
+            Self::UnexpectedCharacter => "unexpected character",
+            Self::ExpectedOperand => "expected operand",
+            Self::ExpectedRegister => "expected register",
+            Self::ExpectedComma => "expected comma",
+            Self::UnexpectedToken => "unexpected token",
+            Self::TooManyOperands => "too many operands",
+            Self::TooFewOperands => "too few operands",
+            Self::InvalidOperandType => "invalid operand type",
+            Self::DuplicateLabel => "duplicate label",
+            Self::MissingOrig => "missing .ORIG directive",
+            Self::MultipleOrig => "multiple .ORIG directives",
+            Self::MissingEnd => "missing .END directive",
+            Self::InvalidOrigAddress => "invalid .ORIG address",
+            Self::InvalidBlkwCount => "invalid .BLKW count",
+            Self::AddressOverflow => "address overflow",
+            Self::UndefinedLabel => "undefined label",
+            Self::OffsetOutOfRange => "PC offset out of range",
+        };
+        f.write_str(s)
+    }
+}
+
 impl std::fmt::Display for AsmError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(

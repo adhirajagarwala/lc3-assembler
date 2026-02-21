@@ -22,6 +22,31 @@ use crate::error::{AsmError, ErrorKind, Span};
 use crate::first_pass::{symbol_table::SymbolTable, FirstPassResult};
 use crate::parser::ast::{Instruction, LineContent, SourceLine};
 
+// LC-3 opcode constants — bits 15:12 of every instruction word.
+const OP_ADD: u16 = 0b0001;
+const OP_AND: u16 = 0b0101;
+const OP_NOT: u16 = 0b1001;
+const OP_LD: u16 = 0b0010;
+const OP_LDI: u16 = 0b1010;
+const OP_LEA: u16 = 0b1110;
+const OP_ST: u16 = 0b0011;
+const OP_STI: u16 = 0b1011;
+const OP_LDR: u16 = 0b0110;
+const OP_STR: u16 = 0b0111;
+const OP_BR: u16 = 0b0000;
+const OP_JMP: u16 = 0b1100;
+const OP_JSR: u16 = 0b0100;
+const OP_TRAP: u16 = 0b1111;
+const OP_RTI: u16 = 0b1000;
+
+// Full TRAP instruction words (opcode pre-shifted into bits 15:12).
+const TRAP_GETC: u16 = (OP_TRAP << 12) | 0x20;
+const TRAP_OUT: u16 = (OP_TRAP << 12) | 0x21;
+const TRAP_PUTS: u16 = (OP_TRAP << 12) | 0x22;
+const TRAP_IN: u16 = (OP_TRAP << 12) | 0x23;
+const TRAP_PUTSP: u16 = (OP_TRAP << 12) | 0x24;
+const TRAP_HALT: u16 = (OP_TRAP << 12) | 0x25;
+
 /// Result of the encoding process
 pub struct EncodeResult {
     /// Generated machine code as 16-bit words
@@ -115,43 +140,43 @@ impl<'a> Encoder<'a> {
         let encoded = match inst {
             // Operate instructions
             Instruction::AddReg { dr, sr1, sr2 } => {
-                (0b0001 << 12) | ((*dr as u16) << 9) | ((*sr1 as u16) << 6) | (*sr2 as u16)
+                (OP_ADD << 12) | ((*dr as u16) << 9) | ((*sr1 as u16) << 6) | (*sr2 as u16)
             }
             Instruction::AddImm { dr, sr1, imm5 } => {
                 let imm = sign_extend(*imm5, 5) & 0x1F;
-                (0b0001 << 12) | ((*dr as u16) << 9) | ((*sr1 as u16) << 6) | (1 << 5) | imm
+                (OP_ADD << 12) | ((*dr as u16) << 9) | ((*sr1 as u16) << 6) | (1 << 5) | imm
             }
             Instruction::AndReg { dr, sr1, sr2 } => {
-                (0b0101 << 12) | ((*dr as u16) << 9) | ((*sr1 as u16) << 6) | (*sr2 as u16)
+                (OP_AND << 12) | ((*dr as u16) << 9) | ((*sr1 as u16) << 6) | (*sr2 as u16)
             }
             Instruction::AndImm { dr, sr1, imm5 } => {
                 let imm = sign_extend(*imm5, 5) & 0x1F;
-                (0b0101 << 12) | ((*dr as u16) << 9) | ((*sr1 as u16) << 6) | (1 << 5) | imm
+                (OP_AND << 12) | ((*dr as u16) << 9) | ((*sr1 as u16) << 6) | (1 << 5) | imm
             }
             Instruction::Not { dr, sr } => {
-                (0b1001 << 12) | ((*dr as u16) << 9) | ((*sr as u16) << 6) | 0b111111
+                (OP_NOT << 12) | ((*dr as u16) << 9) | ((*sr as u16) << 6) | 0b111111
             }
 
             // Data movement with PC offset
             Instruction::Ld { dr, label } => {
                 let offset = self.calc_pc_offset(label, 9, span);
-                (0b0010 << 12) | ((*dr as u16) << 9) | offset
+                (OP_LD << 12) | ((*dr as u16) << 9) | offset
             }
             Instruction::Ldi { dr, label } => {
                 let offset = self.calc_pc_offset(label, 9, span);
-                (0b1010 << 12) | ((*dr as u16) << 9) | offset
+                (OP_LDI << 12) | ((*dr as u16) << 9) | offset
             }
             Instruction::Lea { dr, label } => {
                 let offset = self.calc_pc_offset(label, 9, span);
-                (0b1110 << 12) | ((*dr as u16) << 9) | offset
+                (OP_LEA << 12) | ((*dr as u16) << 9) | offset
             }
             Instruction::St { sr, label } => {
                 let offset = self.calc_pc_offset(label, 9, span);
-                (0b0011 << 12) | ((*sr as u16) << 9) | offset
+                (OP_ST << 12) | ((*sr as u16) << 9) | offset
             }
             Instruction::Sti { sr, label } => {
                 let offset = self.calc_pc_offset(label, 9, span);
-                (0b1011 << 12) | ((*sr as u16) << 9) | offset
+                (OP_STI << 12) | ((*sr as u16) << 9) | offset
             }
 
             // Data movement with base+offset
@@ -161,7 +186,7 @@ impl<'a> Encoder<'a> {
                 offset6,
             } => {
                 let offset = sign_extend(*offset6, 6) & 0x3F;
-                (0b0110 << 12) | ((*dr as u16) << 9) | ((*base_r as u16) << 6) | offset
+                (OP_LDR << 12) | ((*dr as u16) << 9) | ((*base_r as u16) << 6) | offset
             }
             Instruction::Str {
                 sr,
@@ -169,43 +194,42 @@ impl<'a> Encoder<'a> {
                 offset6,
             } => {
                 let offset = sign_extend(*offset6, 6) & 0x3F;
-                (0b0111 << 12) | ((*sr as u16) << 9) | ((*base_r as u16) << 6) | offset
+                (OP_STR << 12) | ((*sr as u16) << 9) | ((*base_r as u16) << 6) | offset
             }
 
-            // Branch
+            // Branch (opcode 0000 — zero, so no shift needed; flags occupy bits 11:9)
             Instruction::Br { flags, label } => {
                 let offset = self.calc_pc_offset(label, 9, span);
-                // Use BrFlags::as_u16() which already encodes [N][Z][P] as a 3-bit value.
+                // BrFlags::as_u16() encodes [N][Z][P] as a 3-bit value.
                 // Shifting left by 9 places n→bit11, z→bit10, p→bit9.
-                // The old manual encoding duplicated the same arithmetic already in as_u16().
-                (flags.as_u16() << 9) | offset
+                (OP_BR << 12) | (flags.as_u16() << 9) | offset
             }
 
             // Jump
-            Instruction::Jmp { base_r } => (0b1100 << 12) | ((*base_r as u16) << 6),
+            Instruction::Jmp { base_r } => (OP_JMP << 12) | ((*base_r as u16) << 6),
             Instruction::Ret => {
                 // RET is encoded as JMP R7
-                (0b1100 << 12) | (7 << 6)
+                (OP_JMP << 12) | (7 << 6)
             }
 
             // Subroutine
             Instruction::Jsr { label } => {
                 let offset = self.calc_pc_offset(label, 11, span);
-                (0b0100 << 12) | (1 << 11) | offset
+                (OP_JSR << 12) | (1 << 11) | offset
             }
-            Instruction::Jsrr { base_r } => (0b0100 << 12) | ((*base_r as u16) << 6),
+            Instruction::Jsrr { base_r } => (OP_JSR << 12) | ((*base_r as u16) << 6),
 
             // Trap
-            Instruction::Trap { trapvect8 } => (0b1111 << 12) | (*trapvect8 as u16),
-            Instruction::Getc => 0xF020,  // TRAP x20
-            Instruction::Out => 0xF021,   // TRAP x21
-            Instruction::Puts => 0xF022,  // TRAP x22
-            Instruction::In => 0xF023,    // TRAP x23
-            Instruction::Putsp => 0xF024, // TRAP x24
-            Instruction::Halt => 0xF025,  // TRAP x25
+            Instruction::Trap { trapvect8 } => (OP_TRAP << 12) | (*trapvect8 as u16),
+            Instruction::Getc => TRAP_GETC,
+            Instruction::Out => TRAP_OUT,
+            Instruction::Puts => TRAP_PUTS,
+            Instruction::In => TRAP_IN,
+            Instruction::Putsp => TRAP_PUTSP,
+            Instruction::Halt => TRAP_HALT,
 
             // System
-            Instruction::Rti => 0x8000,
+            Instruction::Rti => OP_RTI << 12,
         };
 
         self.emit(encoded);
@@ -269,7 +293,7 @@ impl<'a> Encoder<'a> {
 /// - Negative values: low bits contain two's complement encoding
 ///
 /// Example: sign_extend(-1, 5) = 0b11111 (5-bit representation of -1)
-fn sign_extend(value: i16, bits: u8) -> u16 {
+const fn sign_extend(value: i16, bits: u8) -> u16 {
     let mask = (1 << bits) - 1;
     (value as u16) & mask
 }

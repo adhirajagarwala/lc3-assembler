@@ -63,7 +63,7 @@ impl LineContent {
             LineContent::FillImmediate(_) => 1,
             LineContent::FillLabel(_) => 1,
             LineContent::Blkw(n) => *n as u32,
-            LineContent::Stringz(s) => (s.len() as u32) + 1, // +1 for null terminator
+            LineContent::Stringz(s) => (s.chars().count() as u32) + 1, // +1 for null terminator
             LineContent::Instruction(_) => 1,
         }
     }

@@ -14,6 +14,9 @@ use crate::error::Span;
 /// - Byte offset (for span creation)
 /// - Line and column numbers (for error messages)
 pub struct Cursor {
+    // TODO-MED: LC-3 source is ASCII-only. Replace Vec<char> with a byte-slice
+    // (`&[u8]`) to avoid the per-character allocation from `.chars().collect()`.
+    // This would also eliminate the separate `byte_offset` field since pos == byte offset.
     /// All characters in the source
     chars: Vec<char>,
     /// Current character index

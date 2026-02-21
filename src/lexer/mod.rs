@@ -35,7 +35,6 @@ pub struct LexResult {
 }
 
 /// Convert a 16-bit unsigned value to i32 using two's complement representation
-#[inline]
 fn u16_to_twos_complement(v: u32) -> i32 {
     if v > 0x7FFF {
         (v as i32) - 0x10000
@@ -45,7 +44,6 @@ fn u16_to_twos_complement(v: u32) -> i32 {
 }
 
 /// Process an escape sequence character and return the actual character
-#[inline]
 fn process_escape_char(esc: char) -> Option<char> {
     match esc {
         'n' => Some('\n'),
@@ -165,9 +163,10 @@ fn lex_comment(
         text.push(ch);
     }
 
+    let lexeme = format!(";{}", text);
     Ok(Some(Token {
-        kind: TokenKind::Comment(text.clone()),
-        lexeme: format!(";{}", text),
+        kind: TokenKind::Comment(text),
+        lexeme,
         span: cursor.make_span(sb, sl, sc),
     }))
 }

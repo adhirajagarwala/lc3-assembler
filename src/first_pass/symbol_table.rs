@@ -50,7 +50,7 @@ impl SymbolTable {
         println!("//\tSymbol Name\tAddress");
         println!("//\t-----------\t-------");
         for (label, addr) in &self.entries {
-            println!("//\t{}\t\tx{:04X}", label, addr);
+            println!("//\t{label}\t\tx{addr:04X}");
         }
     }
 

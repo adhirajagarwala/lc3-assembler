@@ -11,7 +11,7 @@
 # ==============================================================================
 # Stage 1: Builder
 # ==============================================================================
-FROM rust:1.75 as builder
+FROM rust:1.83 AS builder
 
 # Set working directory
 WORKDIR /build
@@ -33,12 +33,6 @@ RUN strip /build/target/release/lc3-assembler
 # Stage 2: Runtime
 # ==============================================================================
 FROM debian:bookworm-slim
-
-# Install minimal dependencies
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
 
 # Copy binary from builder
 COPY --from=builder /build/target/release/lc3-assembler /usr/local/bin/lc3-assembler

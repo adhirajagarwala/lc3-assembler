@@ -23,7 +23,7 @@
 //! let encoded = encode(&first);
 //!
 //! // Check for errors at each stage
-//! if encoded.errors.is_empty() {
+//! if !encoded.has_errors() {
 //!     println!("Success! Generated {} words of machine code", encoded.machine_code.len());
 //! }
 //! ```

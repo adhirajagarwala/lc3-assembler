@@ -1,3 +1,4 @@
 /target/
-Cargo.lock
+# Cargo.lock is intentionally committed for this binary crate.
+# Libraries should omit it; binaries should commit it for reproducible builds.
 .DS_Store

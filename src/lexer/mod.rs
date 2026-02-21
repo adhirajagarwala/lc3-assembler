@@ -34,6 +34,14 @@ pub struct LexResult {
     pub errors: Vec<AsmError>,
 }
 
+impl LexResult {
+    /// Returns `true` if any lexer errors were recorded.
+    #[must_use]
+    pub fn has_errors(&self) -> bool {
+        !self.errors.is_empty()
+    }
+}
+
 /// Convert a 16-bit unsigned value to i32 using two's complement representation
 fn u16_to_twos_complement(v: u32) -> i32 {
     if v > 0x7FFF {
@@ -70,16 +78,11 @@ pub fn tokenize(source: &str) -> LexResult {
         }
     }
 
-    let (b, l, c) = cursor.current_pos();
+    let (l, c) = cursor.current_pos();
     tokens.push(Token {
         kind: TokenKind::Eof,
         lexeme: String::new(),
-        span: Span {
-            start: b,
-            end: b,
-            line: l,
-            col: c,
-        },
+        span: Span { line: l, col: c },
     });
 
     LexResult { tokens, errors }
@@ -95,41 +98,36 @@ fn lex_token(cursor: &mut Cursor) -> Result<Option<Token>, AsmError> {
         return Ok(None);
     }
 
-    let (sb, sl, sc) = cursor.current_pos();
+    let (sl, sc) = cursor.current_pos();
     let ch = cursor.peek().unwrap();
 
     match ch {
-        '\n' | '\r' => lex_newline(cursor, sb, sl, sc),
-        ';' => lex_comment(cursor, sb, sl, sc),
+        '\n' | '\r' => lex_newline(cursor, sl, sc),
+        ';' => lex_comment(cursor, sl, sc),
         ',' => {
             cursor.advance();
             Ok(Some(Token {
                 kind: TokenKind::Comma,
                 lexeme: ",".into(),
-                span: cursor.make_span(sb, sl, sc),
+                span: cursor.make_span(sl, sc),
             }))
         }
-        '"' => lex_string(cursor, sb, sl, sc),
-        '#' => lex_decimal(cursor, sb, sl, sc),
-        '.' => lex_directive(cursor, sb, sl, sc),
-        c if c.is_ascii_alphabetic() || c == '_' => lex_word(cursor, sb, sl, sc),
+        '"' => lex_string(cursor, sl, sc),
+        '#' => lex_decimal(cursor, sl, sc),
+        '.' => lex_directive(cursor, sl, sc),
+        c if c.is_ascii_alphabetic() || c == '_' => lex_word(cursor, sl, sc),
         _ => {
             cursor.advance();
             Err(AsmError {
                 kind: ErrorKind::UnexpectedCharacter,
-                message: format!("Unexpected character: '{}'", ch),
-                span: cursor.make_span(sb, sl, sc),
+                message: format!("Unexpected character: '{ch}'"),
+                span: cursor.make_span(sl, sc),
             })
         }
     }
 }
 
-fn lex_newline(
-    cursor: &mut Cursor,
-    sb: usize,
-    sl: usize,
-    sc: usize,
-) -> Result<Option<Token>, AsmError> {
+fn lex_newline(cursor: &mut Cursor, sl: usize, sc: usize) -> Result<Option<Token>, AsmError> {
     if cursor.peek() == Some('\r') {
         cursor.advance();
         if cursor.peek() == Some('\n') {
@@ -138,20 +136,14 @@ fn lex_newline(
     } else {
         cursor.advance();
     }
-
     Ok(Some(Token {
         kind: TokenKind::Newline,
         lexeme: "\n".into(),
-        span: cursor.make_span(sb, sl, sc),
+        span: cursor.make_span(sl, sc),
     }))
 }
 
-fn lex_comment(
-    cursor: &mut Cursor,
-    sb: usize,
-    sl: usize,
-    sc: usize,
-) -> Result<Option<Token>, AsmError> {
+fn lex_comment(cursor: &mut Cursor, sl: usize, sc: usize) -> Result<Option<Token>, AsmError> {
     cursor.advance(); // consume ';'
     let mut text = String::new();
     while let Some(ch) = cursor.peek() {
@@ -161,24 +153,17 @@ fn lex_comment(
         cursor.advance();
         text.push(ch);
     }
-
-    // Build lexeme by prepending ';' without format! overhead.
     let mut lexeme = String::with_capacity(1 + text.len());
     lexeme.push(';');
     lexeme.push_str(&text);
     Ok(Some(Token {
         kind: TokenKind::Comment(text),
         lexeme,
-        span: cursor.make_span(sb, sl, sc),
+        span: cursor.make_span(sl, sc),
     }))
 }
 
-fn lex_string(
-    cursor: &mut Cursor,
-    sb: usize,
-    sl: usize,
-    sc: usize,
-) -> Result<Option<Token>, AsmError> {
+fn lex_string(cursor: &mut Cursor, sl: usize, sc: usize) -> Result<Option<Token>, AsmError> {
     cursor.advance();
     let mut processed = String::new();
     let mut raw = String::from("\"");
@@ -188,7 +173,7 @@ fn lex_string(
             return Err(AsmError {
                 kind: ErrorKind::UnterminatedString,
                 message: "Unterminated string literal".into(),
-                span: cursor.make_span(sb, sl, sc),
+                span: cursor.make_span(sl, sc),
             });
         }
 
@@ -197,7 +182,7 @@ fn lex_string(
             return Err(AsmError {
                 kind: ErrorKind::UnterminatedString,
                 message: "Unterminated string literal".into(),
-                span: cursor.make_span(sb, sl, sc),
+                span: cursor.make_span(sl, sc),
             });
         }
 
@@ -214,7 +199,7 @@ fn lex_string(
                 return Err(AsmError {
                     kind: ErrorKind::UnterminatedString,
                     message: "Unterminated string literal".into(),
-                    span: cursor.make_span(sb, sl, sc),
+                    span: cursor.make_span(sl, sc),
                 });
             }
 
@@ -228,8 +213,8 @@ fn lex_string(
                 None => {
                     return Err(AsmError {
                         kind: ErrorKind::InvalidEscapeSequence,
-                        message: format!("Invalid escape sequence: \\{}", esc),
-                        span: cursor.make_span(sb, sl, sc),
+                        message: format!("Invalid escape sequence: \\{esc}"),
+                        span: cursor.make_span(sl, sc),
                     });
                 }
             }
@@ -243,16 +228,11 @@ fn lex_string(
     Ok(Some(Token {
         kind: TokenKind::StringLiteral(processed),
         lexeme: raw,
-        span: cursor.make_span(sb, sl, sc),
+        span: cursor.make_span(sl, sc),
     }))
 }
 
-fn lex_decimal(
-    cursor: &mut Cursor,
-    sb: usize,
-    sl: usize,
-    sc: usize,
-) -> Result<Option<Token>, AsmError> {
+fn lex_decimal(cursor: &mut Cursor, sl: usize, sc: usize) -> Result<Option<Token>, AsmError> {
     cursor.advance();
     let mut raw = String::from("#");
     let mut sign = String::new();
@@ -274,30 +254,26 @@ fn lex_decimal(
         return Err(AsmError {
             kind: ErrorKind::InvalidDecimalLiteral,
             message: "Expected digits after #".into(),
-            span: cursor.make_span(sb, sl, sc),
+            span: cursor.make_span(sl, sc),
         });
     }
 
-    let value_str = format!("{}{}", sign, digits);
-    let value = value_str.parse::<i32>().map_err(|_| AsmError {
+    // Reuse `sign` (either "" or "-"/"+") by appending digits into it — one allocation.
+    sign.push_str(&digits);
+    let value = sign.parse::<i32>().map_err(|_| AsmError {
         kind: ErrorKind::InvalidDecimalLiteral,
-        message: format!("Invalid decimal literal: {}", raw),
-        span: cursor.make_span(sb, sl, sc),
+        message: format!("Invalid decimal literal: {raw}"),
+        span: cursor.make_span(sl, sc),
     })?;
 
     Ok(Some(Token {
         kind: TokenKind::NumDecimal(value),
         lexeme: raw,
-        span: cursor.make_span(sb, sl, sc),
+        span: cursor.make_span(sl, sc),
     }))
 }
 
-fn lex_directive(
-    cursor: &mut Cursor,
-    sb: usize,
-    sl: usize,
-    sc: usize,
-) -> Result<Option<Token>, AsmError> {
+fn lex_directive(cursor: &mut Cursor, sl: usize, sc: usize) -> Result<Option<Token>, AsmError> {
     cursor.advance();
     let mut raw = String::from(".");
     let mut word = String::new();
@@ -318,8 +294,8 @@ fn lex_directive(
         _ => {
             return Err(AsmError {
                 kind: ErrorKind::UnknownDirective,
-                message: format!("Unknown directive .{}", upper),
-                span: cursor.make_span(sb, sl, sc),
+                message: format!("Unknown directive .{upper}"),
+                span: cursor.make_span(sl, sc),
             })
         }
     };
@@ -327,16 +303,11 @@ fn lex_directive(
     Ok(Some(Token {
         kind,
         lexeme: raw,
-        span: cursor.make_span(sb, sl, sc),
+        span: cursor.make_span(sl, sc),
     }))
 }
 
-fn lex_word(
-    cursor: &mut Cursor,
-    sb: usize,
-    sl: usize,
-    sc: usize,
-) -> Result<Option<Token>, AsmError> {
+fn lex_word(cursor: &mut Cursor, sl: usize, sc: usize) -> Result<Option<Token>, AsmError> {
     let mut word = String::new();
     while matches!(cursor.peek(), Some(c) if c.is_ascii_alphanumeric() || c == '_') {
         let ch = cursor.advance().unwrap();
@@ -353,14 +324,14 @@ fn lex_word(
                 return Ok(Some(Token {
                     kind: TokenKind::Register(reg),
                     lexeme: word,
-                    span: cursor.make_span(sb, sl, sc),
+                    span: cursor.make_span(sl, sc),
                 }));
             }
             if reg == 8 || reg == 9 {
                 return Err(AsmError {
                     kind: ErrorKind::InvalidRegister,
-                    message: format!("Invalid register R{} (must be R0-R7)", reg),
-                    span: cursor.make_span(sb, sl, sc),
+                    message: format!("Invalid register R{reg} (must be R0-R7)"),
+                    span: cursor.make_span(sl, sc),
                 });
             }
         }
@@ -395,7 +366,7 @@ fn lex_word(
                 return Ok(Some(Token {
                     kind: TokenKind::OpBr(flags),
                     lexeme: word,
-                    span: cursor.make_span(sb, sl, sc),
+                    span: cursor.make_span(sl, sc),
                 }));
             }
             // HEX LITERAL: Parse as u32 first, then handle 16-bit two's complement
@@ -410,21 +381,21 @@ fn lex_word(
                         return Ok(Some(Token {
                             kind: TokenKind::NumHex(value),
                             lexeme: word,
-                            span: cursor.make_span(sb, sl, sc),
+                            span: cursor.make_span(sl, sc),
                         }));
                     }
                     Ok(_) => {
                         return Err(AsmError {
                             kind: ErrorKind::InvalidHexLiteral,
-                            message: format!("Hex literal {} exceeds 16 bits", word),
-                            span: cursor.make_span(sb, sl, sc),
+                            message: format!("Hex literal {word} exceeds 16 bits"),
+                            span: cursor.make_span(sl, sc),
                         });
                     }
                     Err(_) => {
                         return Err(AsmError {
                             kind: ErrorKind::InvalidHexLiteral,
-                            message: format!("Invalid hex literal: {}", word),
-                            span: cursor.make_span(sb, sl, sc),
+                            message: format!("Invalid hex literal: {word}"),
+                            span: cursor.make_span(sl, sc),
                         });
                     }
                 }
@@ -442,21 +413,21 @@ fn lex_word(
                         return Ok(Some(Token {
                             kind: TokenKind::NumBinary(value),
                             lexeme: word,
-                            span: cursor.make_span(sb, sl, sc),
+                            span: cursor.make_span(sl, sc),
                         }));
                     }
                     Ok(_) => {
                         return Err(AsmError {
                             kind: ErrorKind::InvalidBinaryLiteral,
-                            message: format!("Binary literal {} exceeds 16 bits", word),
-                            span: cursor.make_span(sb, sl, sc),
+                            message: format!("Binary literal {word} exceeds 16 bits"),
+                            span: cursor.make_span(sl, sc),
                         });
                     }
                     Err(_) => {
                         return Err(AsmError {
                             kind: ErrorKind::InvalidBinaryLiteral,
-                            message: format!("Invalid binary literal: {}", word),
-                            span: cursor.make_span(sb, sl, sc),
+                            message: format!("Invalid binary literal: {word}"),
+                            span: cursor.make_span(sl, sc),
                         });
                     }
                 }
@@ -469,6 +440,6 @@ fn lex_word(
     Ok(Some(Token {
         kind,
         lexeme: word,
-        span: cursor.make_span(sb, sl, sc),
+        span: cursor.make_span(sl, sc),
     }))
 }

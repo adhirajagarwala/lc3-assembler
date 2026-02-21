@@ -5,8 +5,8 @@
 //!
 //! LC-3 assembly is strictly ASCII, so the cursor operates on a byte slice
 //! (`&[u8]`) rather than `Vec<char>`. This eliminates the per-source
-//! allocation that `.chars().collect()` required and removes the redundant
-//! `byte_offset` field since `pos == byte_offset` for ASCII input.
+//! allocation that `.chars().collect()` would require. `pos` serves as both
+//! the byte offset and the character index — they are identical for ASCII input.
 
 use crate::error::Span;
 
@@ -64,16 +64,13 @@ impl<'a> Cursor<'a> {
         self.pos >= self.bytes.len()
     }
 
-    pub fn current_pos(&self) -> (usize, usize, usize) {
-        (self.pos, self.line, self.col)
+    /// Returns `(line, col)` of the current cursor position.
+    pub fn current_pos(&self) -> (usize, usize) {
+        (self.line, self.col)
     }
 
-    pub fn make_span(&self, start_byte: usize, start_line: usize, start_col: usize) -> Span {
-        Span {
-            start: start_byte,
-            end: self.pos,
-            line: start_line,
-            col: start_col,
-        }
+    /// Build a `Span` anchored at the given start position.
+    pub fn make_span(&self, start_line: usize, start_col: usize) -> Span {
+        Span { line: start_line, col: start_col }
     }
 }

@@ -39,6 +39,14 @@ pub struct ParseResult {
     pub errors: Vec<AsmError>,
 }
 
+impl ParseResult {
+    /// Returns `true` if any parse errors were recorded.
+    #[must_use]
+    pub fn has_errors(&self) -> bool {
+        !self.errors.is_empty()
+    }
+}
+
 #[must_use]
 pub fn parse_lines(tokens: &[Token]) -> ParseResult {
     let mut lines = Vec::new();
@@ -147,20 +155,10 @@ fn process_line(
 }
 
 fn line_span(tokens: &[Token], line_number: usize) -> Span {
-    if let (Some(first), Some(last)) = (tokens.first(), tokens.last()) {
-        Span {
-            start: first.span.start,
-            end: last.span.end,
-            line: first.span.line,
-            col: first.span.col,
-        }
+    if let Some(first) = tokens.first() {
+        Span { line: first.span.line, col: first.span.col }
     } else {
-        Span {
-            start: 0,
-            end: 0,
-            line: line_number,
-            col: 1,
-        }
+        Span { line: line_number, col: 1 }
     }
 }
 
@@ -300,7 +298,7 @@ fn parse_trap(tokens: &[&Token]) -> Result<LineContent, AsmError> {
     if !(0..=0xFF).contains(&value) {
         return Err(AsmError {
             kind: ErrorKind::InvalidOperandType,
-            message: format!("TRAP vector {} is out of range (must be 0x00-0xFF)", value),
+            message: format!("TRAP vector {value} is out of range (must be 0x00-0xFF)"),
             span: tokens[1].span,
         });
     }
@@ -365,10 +363,7 @@ fn parse_fill(tokens: &[&Token]) -> Result<LineContent, AsmError> {
         if !(i16::MIN as i32..=0xFFFF_i32).contains(&value) {
             return Err(AsmError {
                 kind: ErrorKind::InvalidOperandType,
-                message: format!(
-                    ".FILL value {} is out of 16-bit range (-32768 to 65535)",
-                    value
-                ),
+                message: format!(".FILL value {value} is out of 16-bit range (-32768 to 65535)"),
                 span: tokens[1].span,
             });
         }
@@ -405,7 +400,7 @@ fn parse_blkw(tokens: &[&Token]) -> Result<LineContent, AsmError> {
     if value <= 0 || value > 0xFFFF {
         return Err(AsmError {
             kind: ErrorKind::InvalidBlkwCount,
-            message: format!(".BLKW count {} is out of range (must be 1-65535)", value),
+            message: format!(".BLKW count {value} is out of range (must be 1-65535)"),
             span: tokens[1].span,
         });
     }

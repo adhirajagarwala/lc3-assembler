@@ -36,6 +36,14 @@ pub struct FirstPassResult {
     pub errors: Vec<AsmError>,
 }
 
+impl FirstPassResult {
+    /// Returns `true` if any first-pass errors were recorded.
+    #[must_use]
+    pub fn has_errors(&self) -> bool {
+        !self.errors.is_empty()
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum AssemblerState {
     WaitingForOrig,
@@ -120,10 +128,7 @@ pub fn first_pass(lines: Vec<SourceLine>) -> FirstPassResult {
         if new_lc > 0x10000 {
             errors.push(AsmError::new(
                 ErrorKind::AddressOverflow,
-                format!(
-                    "Address overflow: location counter would exceed 0xFFFF (at x{:04X} + {} words)",
-                    lc, words
-                ),
+                format!("Address overflow: location counter would exceed 0xFFFF (at x{lc:04X} + {words} words)"),
                 line.span,
             ));
             location_counter = Some(0xFFFF); // Cap at max address
@@ -136,12 +141,7 @@ pub fn first_pass(lines: Vec<SourceLine>) -> FirstPassResult {
         errors.push(AsmError::new(
             ErrorKind::MissingOrig,
             "No .ORIG directive found",
-            Span {
-                start: 0,
-                end: 0,
-                line: 1,
-                col: 1,
-            },
+            Span { line: 1, col: 1 },
         ));
     }
 
@@ -149,12 +149,7 @@ pub fn first_pass(lines: Vec<SourceLine>) -> FirstPassResult {
         errors.push(AsmError::new(
             ErrorKind::MissingEnd,
             "No .END directive found",
-            Span {
-                start: 0,
-                end: 0,
-                line: 1,
-                col: 1,
-            },
+            Span { line: 1, col: 1 },
         ));
     }
 

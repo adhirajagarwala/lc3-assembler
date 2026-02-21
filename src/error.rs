@@ -1,7 +1,10 @@
+/// Source location used for error reporting.
+///
+/// Stores the 1-based line and column of the first character of a token.
+/// Byte offsets were removed because they were computed but never read —
+/// if source-underline diagnostics are added later, add `start`/`end` back.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Span {
-    pub start: usize,
-    pub end: usize,
     pub line: usize,
     pub col: usize,
 }
@@ -55,7 +58,7 @@ impl AsmError {
     pub fn undefined_label(label: &str, span: Span) -> Self {
         Self::new(
             ErrorKind::UndefinedLabel,
-            format!("Undefined label '{}'", label),
+            format!("Undefined label '{label}'"),
             span,
         )
     }
@@ -63,10 +66,7 @@ impl AsmError {
     pub fn duplicate_label(label: &str, first_addr: u16, span: Span) -> Self {
         Self::new(
             ErrorKind::DuplicateLabel,
-            format!(
-                "Duplicate label '{}' (first defined at x{:04X})",
-                label, first_addr
-            ),
+            format!("Duplicate label '{label}' (first defined at x{first_addr:04X})"),
             span,
         )
     }

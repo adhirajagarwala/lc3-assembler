@@ -12,6 +12,11 @@
 //! - **Maintainability**: Fixing a bug in the pattern fixes it for all instructions
 //! - **Readability**: The main parser file is much cleaner and easier to understand
 
+// TODO-LOW: The `format!()` calls in macro error messages (e.g. "ADD first operand...")
+// allocate a String on every invocation, even though the instruction name ($name) is a
+// compile-time literal. Replace with `concat!` where possible, or pass &'static str
+// error messages to avoid per-call heap allocation on the error path.
+
 /// Macro to generate parsers for reg-reg-or-imm instructions (ADD, AND)
 ///
 /// These instructions can operate in two modes:

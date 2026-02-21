@@ -41,10 +41,6 @@ impl SymbolTable {
         self.map.get(label).copied()
     }
 
-    pub fn contains(&self, label: &str) -> bool {
-        self.map.contains_key(label)
-    }
-
     pub fn len(&self) -> usize {
         self.map.len()
     }

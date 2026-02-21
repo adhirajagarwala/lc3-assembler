@@ -54,6 +54,9 @@ pub fn parse_lines(tokens: &[Token]) -> ParseResult {
                 process_line(&current, line_number, &mut lines, &mut errors);
                 break;
             }
+            // TODO-MED: Refactor to use &[Token] slices instead of cloning every token.
+            // The parser only needs read access; splitting tokens by Newline/Eof indexes
+            // and passing sub-slices would eliminate one clone per token.
             _ => current.push(token.clone()),
         }
     }
@@ -68,10 +71,13 @@ fn process_line(
     errors: &mut Vec<AsmError>,
 ) {
     let span = line_span(tokens, line_number);
-    let filtered: Vec<&Token> = tokens
+    // Strip any trailing comment token.  `position` short-circuits after finding the
+    // first comment rather than evaluating the predicate for every token afterward.
+    let code_end = tokens
         .iter()
-        .filter(|t| !matches!(t.kind, TokenKind::Comment(_)))
-        .collect();
+        .position(|t| matches!(t.kind, TokenKind::Comment(_)))
+        .unwrap_or(tokens.len());
+    let filtered: Vec<&Token> = tokens[..code_end].iter().collect();
 
     if filtered.is_empty() {
         lines.push(SourceLine {
@@ -89,22 +95,10 @@ fn process_line(
 
     match &first.kind {
         TokenKind::Label(name) => {
-            if filtered.len() == 1 {
-                label = Some(name.clone());
-                lines.push(SourceLine {
-                    label,
-                    content: LineContent::Empty,
-                    line_number,
-                    span,
-                });
-                return;
-            }
-
-            if filtered[1].kind.is_instruction_or_directive() {
-                label = Some(name.clone());
+            label = Some(name.clone());
+            if filtered.len() > 1 && filtered[1].kind.is_instruction_or_directive() {
                 content_tokens = &filtered[1..];
             } else {
-                label = Some(name.clone());
                 lines.push(SourceLine {
                     label,
                     content: LineContent::Empty,
@@ -306,10 +300,7 @@ fn parse_trap(tokens: &[&Token]) -> Result<LineContent, AsmError> {
     if !(0..=0xFF).contains(&value) {
         return Err(AsmError {
             kind: ErrorKind::InvalidOperandType,
-            message: format!(
-                "TRAP vector {} is out of range (must be 0x00-0xFF)",
-                value
-            ),
+            message: format!("TRAP vector {} is out of range (must be 0x00-0xFF)", value),
             span: tokens[1].span,
         });
     }
@@ -414,10 +405,7 @@ fn parse_blkw(tokens: &[&Token]) -> Result<LineContent, AsmError> {
     if value <= 0 || value > 0xFFFF {
         return Err(AsmError {
             kind: ErrorKind::InvalidBlkwCount,
-            message: format!(
-                ".BLKW count {} is out of range (must be 1-65535)",
-                value
-            ),
+            message: format!(".BLKW count {} is out of range (must be 1-65535)", value),
             span: tokens[1].span,
         });
     }
@@ -477,7 +465,11 @@ pub(crate) fn expect_comma(tokens: &[&Token], idx: usize, message: &str) -> Resu
     }
 }
 
-pub(crate) fn expect_register(tokens: &[&Token], idx: usize, message: &str) -> Result<u8, AsmError> {
+pub(crate) fn expect_register(
+    tokens: &[&Token],
+    idx: usize,
+    message: &str,
+) -> Result<u8, AsmError> {
     if tokens.len() <= idx {
         return Err(AsmError {
             kind: ErrorKind::ExpectedRegister,
@@ -492,7 +484,11 @@ pub(crate) fn expect_register(tokens: &[&Token], idx: usize, message: &str) -> R
     })
 }
 
-pub(crate) fn expect_label(tokens: &[&Token], idx: usize, message: &str) -> Result<String, AsmError> {
+pub(crate) fn expect_label(
+    tokens: &[&Token],
+    idx: usize,
+    message: &str,
+) -> Result<String, AsmError> {
     if tokens.len() <= idx {
         return Err(AsmError {
             kind: ErrorKind::ExpectedOperand,

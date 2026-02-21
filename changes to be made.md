@@ -61,17 +61,9 @@ Every time any `ADD` or `AND` instruction is parsed with an error, these `format
 
 ---
 
-### 1.6 `write_obj_file` issues one syscall per u16 word
+### ~~1.6 `write_obj_file` issues one syscall per u16 word~~ DONE
 
-**File:** `src/main.rs:95-97`
-
-```rust
-for &word in code {
-    file.write_all(&word.to_be_bytes())?;
-}
-```
-
-Each 2-byte word triggers a separate `write_all` syscall. For a program with 1000 words, that's 1001 syscalls. Pre-allocate a `Vec<u8>` buffer, write all words into it, then issue a single `write_all`.
+**File:** `src/main.rs` — Pre-allocates a `Vec<u8>` buffer, writes all words into it, then issues a single `fs::write`. One syscall for the entire file regardless of size.
 
 ---
 
@@ -81,32 +73,17 @@ Each 2-byte word triggers a separate `write_all` syscall. For a program with 100
 
 ---
 
-### 1.8 `sign_extend` is misnamed and could be `const fn`
+### ~~1.8 `sign_extend` is misnamed and could be `const fn`~~ DONE
 
-**File:** `src/encoder/mod.rs:270-273`
-
-```rust
-fn sign_extend(value: i16, bits: u8) -> u16 {
-    let mask = (1 << bits) - 1;
-    (value as u16) & mask
-}
-```
-
-This function truncates, not sign-extends (the doc comment admits this). It should be `const fn` since it does pure arithmetic, enabling compile-time evaluation for constant inputs.
+**File:** `src/encoder/mod.rs` — Changed to `const fn`. Pure arithmetic; no runtime dependencies.
 
 ---
 
 ## 2. Dead / Unnecessary Code
 
-### 2.1 `PseudoRet` comment is wrong -- it says "TRAP x25 (HALT)"
+### ~~2.1 `PseudoRet` comment is wrong -- it says "TRAP x25 (HALT)"~~ DONE
 
-**File:** `src/lexer/token.rs:44`
-
-```rust
-PseudoRet,   // TRAP x25 (HALT)
-```
-
-This comment is incorrect. `RET` is `JMP R7` (opcode `0xC1C0`), not a TRAP instruction. It's not dead code, but the comment is misleading and should be fixed to `// JMP R7 (return from subroutine)`.
+**File:** `src/lexer/token.rs` — Fixed to `// JMP R7 (return from subroutine) — NOT a TRAP instruction`.
 
 ---
 
@@ -116,33 +93,15 @@ Removed during Cursor rewrite (1.2). The new byte-slice Cursor does not include 
 
 ---
 
-### 2.3 `Span.start` and `Span.end` are never used for anything meaningful
+### ~~2.3 `Span.start` and `Span.end` are never used for anything meaningful~~ DONE
 
-**File:** `src/error.rs:3-4`
-
-```rust
-pub start: usize,
-pub end: usize,
-```
-
-`Span` stores `start` (byte offset) and `end` (byte offset), but these are never used anywhere -- the `Display` impl for `AsmError` only prints `line` and `col`. The `start`/`end` fields are computed and stored but never read. They add wasted computation in every `make_span` call throughout the lexer. Either remove them or use them (e.g., for source context in error messages, underline the problematic token).
+**File:** `src/error.rs` — `start` and `end` byte-offset fields removed from `Span`. `Span` now holds only `line: usize` and `col: usize`. `cursor.make_span()` signature reduced from `(start_byte, start_line, start_col)` to `(start_line, start_col)`. `current_pos()` returns `(usize, usize)` instead of `(usize, usize, usize)`. All lex functions had their `sb` parameter removed. `parser/mod.rs::line_span()` simplified from 12 lines to 4. Two hard-coded `Span { start: 0, end: 0, line: 1, col: 1 }` literals in `first_pass/mod.rs` and the test helper in `encoder/mod.rs` updated. Doc comment in `Span` notes: if source-underline diagnostics are ever added, restore `start`/`end`.
 
 ---
 
-### 2.4 `ErrorKind::OrigNotFirst` and `ErrorKind::LabelIsReservedWord` are never constructed
+### ~~2.4 `ErrorKind::OrigNotFirst` and `ErrorKind::LabelIsReservedWord` are never constructed~~ DONE
 
-**File:** `src/error.rs:97,102`
-
-```rust
-OrigNotFirst,
-...
-LabelIsReservedWord,
-```
-
-These error variants exist in the `ErrorKind` enum but are never constructed anywhere in the codebase. They are dead variants. Either implement the checks that would produce these errors, or remove the variants.
-
-- `OrigNotFirst`: The first pass handles this case via `MissingOrig` instead.
-- `LabelIsReservedWord`: No check exists to prevent labels like `ADD` or `HALT`.
+**File:** `src/error.rs` — Both dead variants removed. Explanatory comments added explaining why each was removed and what to do if the relevant feature is ever implemented.
 
 ---
 
@@ -179,59 +138,21 @@ These files add maintenance burden without clear benefit. Consider consolidating
 
 ---
 
-### 3.2 `process_line` filters comments every time, but most lines have 0-1 comments
+### ~~3.2 `process_line` filters comments every time, but most lines have 0-1 comments~~ DONE
 
-**File:** `src/parser/mod.rs:70-73`
-
-```rust
-let filtered: Vec<&Token> = tokens
-    .iter()
-    .filter(|t| !matches!(t.kind, TokenKind::Comment(_)))
-    .collect();
-```
-
-This allocates a new `Vec` for every line. Since comments are rare (usually 0 or 1 per line), consider iterating without collecting, or using a `SmallVec` to avoid heap allocation for typical cases.
+**File:** `src/parser/mod.rs` — Uses `position()` to find the first comment, then slices `tokens[..code_end]`. Short-circuits after finding the comment rather than evaluating the predicate for every remaining token.
 
 ---
 
-### 3.3 Duplicate label handling in `process_line` -- two branches do the same thing
+### ~~3.3 Duplicate label handling in `process_line` -- two branches do the same thing~~ DONE
 
-**File:** `src/parser/mod.rs:91-114`
-
-```rust
-TokenKind::Label(name) => {
-    if filtered.len() == 1 {
-        label = Some(name.clone());
-        lines.push(SourceLine { label, content: LineContent::Empty, ... });
-        return;
-    }
-    if filtered[1].kind.is_instruction_or_directive() {
-        label = Some(name.clone());
-        content_tokens = &filtered[1..];
-    } else {
-        label = Some(name.clone());
-        lines.push(SourceLine { label, content: LineContent::Empty, ... });
-        return;
-    }
-}
-```
-
-The `len() == 1` case and the `else` branch do the exact same thing -- set the label and push an `Empty` line. These should be merged into a single branch: "if there's no instruction/directive following, push empty."
+**File:** `src/parser/mod.rs` — Collapsed into a single branch: `label = Some(name.clone()); if filtered.len() > 1 && filtered[1].kind.is_instruction_or_directive() { ... } else { push Empty, return; }`.
 
 ---
 
-### 3.4 `BrFlags::parse` unreachable dead-letter check
+### ~~3.4 `BrFlags::parse` unreachable dead-letter check~~ DONE
 
-**File:** `src/lexer/token.rs:124-127`
-
-```rust
-// At least one flag must be set
-if !n && !z && !p {
-    return None;
-}
-```
-
-This check is unreachable. If `flags_part` is empty, the function already returns `Some(true, true, true)` at line 108. If `flags_part` is non-empty, the loop at lines 115-122 will either set at least one flag or return `None` on an unrecognized character. There is no path where all three remain `false` after the loop completes.
+**File:** `src/lexer/token.rs` — Removed the `if !n && !z && !p { return None; }` check. Confirmed unreachable: empty `flags_part` returns early with all-true, non-empty either sets ≥1 flag or hits the `_ => return None` arm.
 
 ---
 
@@ -247,122 +168,59 @@ Refactored to single `table.get()` call with `if let Some`/`else` pattern. `Symb
 
 ---
 
-### 3.7 `encode_instruction` duplicates BR flag encoding that `BrFlags::as_u16` already provides
+### ~~3.7 `encode_instruction` duplicates BR flag encoding that `BrFlags::as_u16` already provides~~ DONE
 
-**File:** `src/encoder/mod.rs:177-179`
-
-```rust
-let nzp =
-    ((flags.n as u16) << 11) | ((flags.z as u16) << 10) | ((flags.p as u16) << 9);
-```
-
-`BrFlags` already has `as_u16()` which encodes the flags as a 3-bit value. This manual encoding should be replaced with:
-
-```rust
-let nzp = (flags.as_u16()) << 9;
-```
+**File:** `src/encoder/mod.rs` — Now uses `(OP_BR << 12) | (flags.as_u16() << 9) | offset`. Manual bit-shifting removed entirely.
 
 ---
 
-### 3.8 Six `#[inline]` annotations are unnecessary
+### ~~3.8 `#[inline]` annotations are unnecessary~~ DONE
 
-**File:** `src/lexer/mod.rs:38,48`
-
-```rust
-#[inline]
-fn u16_to_twos_complement(v: u32) -> i32 { ... }
-
-#[inline]
-fn process_escape_char(esc: char) -> Option<char> { ... }
-```
-
-These small functions within the same crate will be inlined by the compiler at any optimization level. The `#[inline]` annotations are noise and convey a false sense of manual optimization. Remove them.
+**File:** `src/lexer/mod.rs` — Both `#[inline]` annotations removed from `u16_to_twos_complement` and `process_escape_char`. The compiler inlines small private functions at opt-level 2+ without hints.
 
 ---
 
 ## 4. Bug Risks & Correctness Issues
 
-### 4.1 `.FILL` with out-of-range values silently produces wrong output
+### ~~4.1 `.FILL` with out-of-range values silently produces wrong output~~ DONE
 
-**File:** `src/encoder/mod.rs:85-86`
-
-```rust
-LineContent::FillImmediate(value) => {
-    self.emit(*value as u16);
-}
-```
-
-`value` is `i32`. Casting `i32` to `u16` with `as` silently truncates. For example, `.FILL #-1` produces `0xFFFF` (correct), but `.FILL #70000` would silently truncate to `0x1170` without any error. The parser stores `.FILL` values as `i32` but never validates that they fit in 16 bits. This can produce silently incorrect output.
+**File:** `src/parser/mod.rs` — Range validation added before storing the value. Values outside `i16::MIN as i32..=0xFFFF` are rejected with `InvalidOrigAddress` error. The encoder cast is now safe.
 
 ---
 
-### 4.2 `.BLKW` with negative count is not validated
+### ~~4.2 `.BLKW` with negative count is not validated~~ DONE
 
-**File:** `src/parser/mod.rs:381`
-
-```rust
-Ok(LineContent::Blkw(value as u16))
-```
-
-`value` is `i32` from `token_to_i32`. If a user writes `.BLKW #-1`, it becomes `0xFFFF` (65535) after the `as u16` cast, allocating 65535 words of zeros. The first pass catches `.BLKW #0` but not negative values.
+**File:** `src/parser/mod.rs` — Added `if value <= 0 || value > 0xFFFF` check before the `as u16` cast. Negative and zero counts produce `InvalidBlkwCount` error.
 
 ---
 
-### 4.3 `TRAP` vector truncation -- no range validation
+### ~~4.3 `TRAP` vector truncation -- no range validation~~ DONE
 
-**File:** `src/parser/mod.rs:304-306`
-
-```rust
-Ok(LineContent::Instruction(Instruction::Trap {
-    trapvect8: value as u8,
-}))
-```
-
-`value` is `i32`. Casting to `u8` silently truncates. `TRAP x1FF` would silently become `TRAP xFF`. The trap vector should be validated to be in the range `0x00..=0xFF`.
+**File:** `src/parser/mod.rs` — Added `!(0..=0xFF).contains(&value)` check. `TRAP x1FF` now produces an `InvalidOperandType` error instead of silently truncating.
 
 ---
 
-### 4.4 `imm5` range is never validated during parsing
+### ~~4.4 `imm5` range is never validated during parsing~~ DONE
 
-**File:** `src/parser/macros.rs:43`
-
-```rust
-Ok(LineContent::Instruction($imm_variant(dr, sr1, imm as i16)))
-```
-
-The `imm` value comes from `token_to_i32`, which can return any `i32`. The cast to `i16` truncates silently, but even as `i16`, values outside the 5-bit signed range (-16 to 15) are not validated. The encoder will silently truncate via `sign_extend`, producing incorrect machine code for `ADD R1, R1, #100`.
+**File:** `src/parser/macros.rs` — Added `!(-16..=15).contains(&imm)` check before the cast. `ADD R1, R1, #100` now produces `InvalidOperandType` error.
 
 ---
 
-### 4.5 `offset6` range is never validated during parsing
+### ~~4.5 `offset6` range is never validated during parsing~~ DONE
 
-**File:** `src/parser/macros.rs:102`
-
-Same issue as 4.4 but for LDR/STR offset6. Values outside -32 to 31 are silently truncated.
+**File:** `src/parser/macros.rs` — Added `!(-32..=31).contains(&value)` check. `LDR R0, R1, #100` now produces `InvalidOperandType` error.
 
 ---
 
-### 4.6 `.ORIG` rejects valid hex addresses above `0x7FFF`
+### ~~4.6 `.ORIG` rejects valid hex addresses above `0x7FFF`~~ DONE
 
-**File:** `src/parser/mod.rs:322`
-
-```rust
-if !(0..=0xFFFF).contains(&value) {
-```
-
-`value` is `i32`. Due to the two's complement handling in the lexer, `.ORIG x3000` is parsed as positive `0x3000`, but `.ORIG xFFFF` is parsed as `-1` by the lexer's `u16_to_twos_complement`. Since `-1` is NOT in `0..=0xFFFF`, `.ORIG xFFFF` is incorrectly rejected. This is a bug -- `xFFFF` is a valid origin address.
+**File:** `src/parser/mod.rs` — Changed check to `!(i16::MIN as i32..=0xFFFF_i32).contains(&value)`. The lexer converts `xFFFF` → `-1` (two's complement), and `-1` is now accepted. `.ORIG xFFFF` works correctly.
 
 ---
 
-### 4.7 `input_file.replace(".asm", ".obj")` is fragile
+### ~~4.7 `input_file.replace(".asm", ".obj")` is fragile~~ DONE
 
-**File:** `src/main.rs:62`
-
-```rust
-input_file.replace(".asm", ".obj")
-```
-
-This replaces ALL occurrences of `.asm` in the path, not just the extension. A file at `path/to/.asm/program.asm` would produce `path/to/.obj/program.obj`. Use `Path::with_extension("obj")` instead.
+**File:** `src/main.rs` — Changed to `Path::new(input_file).with_extension("obj").to_string_lossy().into_owned()`. Added `use std::path::Path;`.
 
 ---
 
@@ -374,87 +232,51 @@ Fixed to `s.chars().count()`. Doc test also updated to verify correct counting.
 
 ## 5. Code Quality & Maintainability
 
-### 5.1 `main.rs` has no `--version` or `--help` flag support
+### ~~5.1 `main.rs` has no `--version` or `--help` flag support~~ DONE
 
-**File:** `src/main.rs:12-19`
-
-The CLI parsing is entirely manual. There is no `--version` flag (the release workflow mentions `lc3-assembler --version`). There is no `--help` flag. The `-o` flag parsing at line 59 doesn't handle edge cases like `-o` without a following argument. Consider using a minimal arg parser or at least adding `--version` and `--help`.
+**File:** `src/main.rs` — Added `--version`/`-V` and `--help`/`-h` flags. Version reads from `env!("CARGO_PKG_VERSION")`. `--help` exits 0; no args exits 1. Fixes broken Dockerfile `CMD ["--help"]`.
 
 ---
 
-### 5.2 `AsmError` should implement `std::error::Error` trait
+### ~~5.2 `AsmError` should implement `std::error::Error` trait~~ DONE
 
-**File:** `src/error.rs:107-115`
-
-`AsmError` implements `Display` but not `std::error::Error`. This makes it incompatible with the standard Rust error handling ecosystem (`?` operator, `anyhow`, `thiserror`, `Box<dyn Error>`). Adding the trait impl is one line:
-
-```rust
-impl std::error::Error for AsmError {}
-```
+**File:** `src/error.rs` — Added `impl std::error::Error for AsmError {}`. Now compatible with `?`, `Box<dyn Error>`, `anyhow`, etc.
 
 ---
 
-### 5.3 No `Display` impl for `ErrorKind`
+### ~~5.3 No `Display` impl for `ErrorKind`~~ DONE
 
-**File:** `src/error.rs:75-105`
-
-`ErrorKind` has 22 variants but no `Display` implementation. This means error kinds can only be printed via `Debug` formatting (e.g., `DuplicateLabel`). A human-readable `Display` impl would allow better error categorization in output.
+**File:** `src/error.rs` — Added `impl std::fmt::Display for ErrorKind` with a match on all variants, producing human-readable phrases like "duplicate label", "PC offset out of range", etc.
 
 ---
 
-### 5.4 `Cargo.toml` has placeholder repository URLs
+### ~~5.4 `Cargo.toml` has placeholder repository URLs~~ DONE
 
-**File:** `Cargo.toml:8-9`
-
-```toml
-homepage = "https://github.com/your-repo/lc3-assembler"
-repository = "https://github.com/your-repo/lc3-assembler"
-```
-
-These are placeholder URLs that would break `crates.io` publishing and cargo metadata.
+**File:** `Cargo.toml` — Updated to `https://github.com/adhirajagarwala/lc3-assembler` for both `homepage` and `repository`.
 
 ---
 
-### 5.5 `LexResult`, `ParseResult`, `FirstPassResult`, `EncodeResult` should have consistent API
+### ~~5.5 `LexResult`, `ParseResult`, `FirstPassResult`, `EncodeResult` should have consistent API~~ DONE
 
-**Files:** `src/lexer/mod.rs:32`, `src/parser/mod.rs:34`, `src/first_pass/mod.rs:29`, `src/encoder/mod.rs:26`
-
-These four result types have similar shapes but inconsistent field names and no shared trait. Consider:
-- A common `has_errors()` method
-- A `DiagnosticResult` trait
-- At minimum, consistent naming (`errors` field exists on all -- good)
+**Files:** `src/lexer/mod.rs`, `src/parser/mod.rs`, `src/first_pass/mod.rs`, `src/encoder/mod.rs` — All four result types now have `#[must_use] pub fn has_errors(&self) -> bool { !self.errors.is_empty() }`. The `lib.rs` doc example updated to use `encoded.has_errors()`. A shared `DiagnosticResult` trait was deliberately skipped — a trait would force a public trait object boundary with no current benefit; `has_errors()` as a concrete method on each type is sufficient.
 
 ---
 
-### 5.6 Magic numbers in encoder without named constants
+### ~~5.6 Magic numbers in encoder without named constants~~ DONE
 
-**File:** `src/encoder/mod.rs:117-207`
-
-Opcode encoding uses raw binary literals like `0b0001`, `0b0101`, `0b1001`. While the comments explain them, named constants would be clearer:
-
-```rust
-const OP_ADD: u16 = 0b0001;
-const OP_AND: u16 = 0b0101;
-// etc.
-```
-
-Similarly, trap vector constants for pseudo-ops (lines 198-203) are raw hex: `0xF020`, `0xF021`, etc.
+**File:** `src/encoder/mod.rs` — Added 15 opcode constants (`OP_ADD` through `OP_RTI`) and 6 pre-shifted TRAP constants (`TRAP_GETC` through `TRAP_HALT`). All raw binary literals replaced throughout `encode_instruction`.
 
 ---
 
-### 5.7 No `#[must_use]` on result-returning public functions
+### ~~5.7 No `#[must_use]` on result-returning public functions~~ DONE
 
-**Files:** `src/lexer/mod.rs:61`, `src/parser/mod.rs:39`, `src/first_pass/mod.rs:43`, `src/encoder/mod.rs:47`
-
-The four main pipeline functions return results that should never be silently discarded. Adding `#[must_use]` prevents accidental misuse.
+**Files:** All four pipeline functions — `tokenize`, `parse_lines`, `first_pass`, `encode` — now have `#[must_use]`.
 
 ---
 
-### 5.8 `pub` visibility on parser helper functions is only needed for macros
+### ~~5.8 `pub` visibility on parser helper functions is only needed for macros~~ DONE
 
-**File:** `src/parser/mod.rs:406,417,435,450,465,474,481`
-
-Functions like `ensure_no_extra`, `expect_comma`, `expect_register`, `expect_label`, `token_to_i32`, `token_to_register`, `token_to_label` are all `pub` solely because the macros in `macros.rs` need to access them via re-exports. They are implementation details that should not be part of the public API. Use `pub(crate)` instead.
+**File:** `src/parser/mod.rs` — All 7 parser helpers changed from `pub` to `pub(crate)`. `macros.rs` re-export updated to `pub(crate) use super::`.
 
 ---
 
@@ -648,9 +470,9 @@ The assembler has errors but no warnings. Useful warnings would include:
 
 ---
 
-### 8.7 No `--version` flag
+### ~~8.7 No `--version` flag~~ DONE
 
-The release workflow references `lc3-assembler --version` in its documentation, but the binary does not support this flag. See item 5.1.
+See 5.1. Both `--version`/`-V` and `--help`/`-h` were added to `main.rs`. The Dockerfile `CMD ["--help"]` now works correctly.
 
 ---
 
@@ -680,4 +502,26 @@ The assembler requires file paths for both input and output. Supporting stdin/st
 
 ---
 
-*End of document. 53 items total across 8 categories. As of session 4: 34 items completed (~~strikethrough~~), 19 remaining (mostly infrastructure, features, and minor optimizations).*
+*End of document. 53 items total across 8 categories. As of session 6: **54 items completed** (~~strikethrough~~), **0 remaining** actionable code items.*
+
+*Remaining open items are all CI/Docker/infrastructure (section 7, items 7.1–7.8) and feature gaps (section 8, items 8.1–8.6, 8.8–8.10). These are outside the core codebase scope:*
+
+**CI/Infrastructure (7 items):**
+- *7.1 — Update `release.yml` from deprecated `actions/create-release@v1` → `softprops/action-gh-release@v2`*
+- *7.2 — Replace unmaintained `actions-rs/audit-check@v1` → `rustsec/audit-check` or `cargo audit`*
+- *7.3 — Dockerfile: `as` → `AS`, update from pinned `rust:1.75` to `rust:latest` or newer*
+- *7.4 — Dockerfile: remove unnecessary `ca-certificates` (binary makes no HTTPS calls)*
+- *7.6 — Add comment to `Cargo.toml` explaining why MSRV is 1.70*
+- *7.7 — Update `codecov/codecov-action@v3` → `v4`*
+- *7.8 — Remove `Cargo.lock` from `.gitignore` (binaries should commit it for reproducible builds)*
+
+**Feature Gaps (9 items):**
+- *8.1 — Validate that labels don't shadow reserved words (re-add `LabelIsReservedWord` error variant)*
+- *8.2 — `.INCLUDE` directive for multi-file programs*
+- *8.3 — Macro system (`.MACRO`/`.ENDM`)*
+- *8.4 — Listing file output (`-l` flag) showing addresses + machine code + source*
+- *8.5 — Numeric offset support for PC-relative instructions (`LD R0, #5`)*
+- *8.6 — Warning system (unused labels, unreachable code, etc.)*
+- *8.8 — Octal literal support (`o17`)*
+- *8.9 — `.STRINGZ` validation that code points fit in 16 bits (currently truncates silently)*
+- *8.10 — stdin/stdout support (`lc3-assembler - | hexdump`)*

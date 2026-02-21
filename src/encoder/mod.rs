@@ -57,6 +57,14 @@ pub struct EncodeResult {
     pub errors: Vec<AsmError>,
 }
 
+impl EncodeResult {
+    /// Returns `true` if any encoding errors were recorded.
+    #[must_use]
+    pub fn has_errors(&self) -> bool {
+        !self.errors.is_empty()
+    }
+}
+
 /// Encode the assembled program into LC-3 machine code
 ///
 /// This function performs the second pass of the assembler, converting
@@ -260,10 +268,7 @@ impl<'a> Encoder<'a> {
                 if offset < min_offset || offset > max_offset {
                     self.errors.push(AsmError {
                         kind: ErrorKind::OffsetOutOfRange,
-                        message: format!(
-                            "PC offset {} to label '{}' exceeds {}-bit range [{}, {}]",
-                            offset, label, bits, min_offset, max_offset
-                        ),
+                        message: format!("PC offset {offset} to label '{label}' exceeds {bits}-bit range [{min_offset}, {max_offset}]"),
                         span,
                     });
                     0 // Use 0 on error, but error is recorded
@@ -308,12 +313,7 @@ mod tests {
     // Helpers
     // ---------------------------------------------------------------
 
-    const DUMMY_SPAN: Span = Span {
-        start: 0,
-        end: 0,
-        line: 1,
-        col: 1,
-    };
+    const DUMMY_SPAN: Span = Span { line: 1, col: 1 };
 
     /// Build a minimal `FirstPassResult` from an origin address, a list of
     /// `LineContent` items, and a symbol table.  Every line gets a dummy span

@@ -264,6 +264,39 @@ mod lexer_tests {
     }
 
     #[test]
+    fn octal_literal() {
+        // 0o17 = 8+7 = 15
+        assert_eq!(lex_ok("0o17"), vec![TokenKind::NumOctal(15), TokenKind::Eof]);
+    }
+
+    #[test]
+    fn octal_literal_uppercase_prefix() {
+        // Lexer uppercases everything, so 0O17 is the same as 0o17
+        assert_eq!(lex_ok("0O17"), vec![TokenKind::NumOctal(15), TokenKind::Eof]);
+    }
+
+    #[test]
+    fn octal_literal_zero() {
+        assert_eq!(lex_ok("0o0"), vec![TokenKind::NumOctal(0), TokenKind::Eof]);
+    }
+
+    #[test]
+    fn octal_literal_twos_complement() {
+        // 0o177777 = 65535 = 0xFFFF → two's complement → -1
+        assert_eq!(
+            lex_ok("0o177777"),
+            vec![TokenKind::NumOctal(-1), TokenKind::Eof]
+        );
+    }
+
+    #[test]
+    fn octal_literal_overflow() {
+        // 0o200000 = 65536 → exceeds 16 bits
+        let errors = lex_errors("0o200000");
+        assert_eq!(errors, vec![ErrorKind::InvalidOctalLiteral]);
+    }
+
+    #[test]
     fn invalid_decimal() {
         let errors = lex_errors("#abc");
         assert_eq!(errors, vec![ErrorKind::InvalidDecimalLiteral]);

@@ -62,6 +62,7 @@ pub enum TokenKind {
     NumDecimal(i32), // #123 or #-45
     NumHex(i32),     // x3000 (two's complement signed)
     NumBinary(i32),  // b1010 (two's complement signed)
+    NumOctal(i32),   // 0o777 (two's complement signed)
 
     StringLiteral(String), // "hello\n"
 

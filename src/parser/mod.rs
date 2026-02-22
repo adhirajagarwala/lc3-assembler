@@ -156,9 +156,15 @@ fn process_line(
 
 fn line_span(tokens: &[Token], line_number: usize) -> Span {
     if let Some(first) = tokens.first() {
-        Span { line: first.span.line, col: first.span.col }
+        Span {
+            line: first.span.line,
+            col: first.span.col,
+        }
     } else {
-        Span { line: line_number, col: 1 }
+        Span {
+            line: line_number,
+            col: 1,
+        }
     }
 }
 

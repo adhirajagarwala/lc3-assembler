@@ -99,7 +99,9 @@ fn print_help() {
     println!("  lc3-assembler <input.asm> [-o output.obj]");
     println!();
     println!("OPTIONS:");
-    println!("  -o <output.obj>   Write machine code to this file (default: replaces .asm with .obj)");
+    println!(
+        "  -o <output.obj>   Write machine code to this file (default: replaces .asm with .obj)"
+    );
     println!("  -h, --help        Print this help message");
     println!("  -V, --version     Print version information");
     println!();

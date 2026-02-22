@@ -797,7 +797,10 @@ mod tests {
         );
         let result = encode(&fp);
         assert_eq!(result.errors.len(), 1);
-        assert_eq!(result.errors[0].kind, crate::error::ErrorKind::NonAsciiInStringz);
+        assert_eq!(
+            result.errors[0].kind,
+            crate::error::ErrorKind::NonAsciiInStringz
+        );
         // Word count is still 5: 'c','a','f','é'(low byte),'\\0'
         assert_eq!(result.machine_code.len(), 5);
         assert_eq!(result.machine_code[0], b'c' as u16);

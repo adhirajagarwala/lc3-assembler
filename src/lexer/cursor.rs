@@ -71,6 +71,9 @@ impl<'a> Cursor<'a> {
 
     /// Build a `Span` anchored at the given start position.
     pub fn make_span(&self, start_line: usize, start_col: usize) -> Span {
-        Span { line: start_line, col: start_col }
+        Span {
+            line: start_line,
+            col: start_col,
+        }
     }
 }

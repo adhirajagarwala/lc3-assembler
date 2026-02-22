@@ -115,7 +115,7 @@ fn lex_token(cursor: &mut Cursor) -> Result<Option<Token>, AsmError> {
         '"' => lex_string(cursor, sl, sc),
         '#' => lex_decimal(cursor, sl, sc),
         '.' => lex_directive(cursor, sl, sc),
-        c if c.is_ascii_alphabetic() || c == '_' => lex_word(cursor, sl, sc),
+        c if c.is_ascii_alphanumeric() || c == '_' => lex_word(cursor, sl, sc),
         _ => {
             cursor.advance();
             Err(AsmError {

@@ -266,13 +266,19 @@ mod lexer_tests {
     #[test]
     fn octal_literal() {
         // 0o17 = 8+7 = 15
-        assert_eq!(lex_ok("0o17"), vec![TokenKind::NumOctal(15), TokenKind::Eof]);
+        assert_eq!(
+            lex_ok("0o17"),
+            vec![TokenKind::NumOctal(15), TokenKind::Eof]
+        );
     }
 
     #[test]
     fn octal_literal_uppercase_prefix() {
         // Lexer uppercases everything, so 0O17 is the same as 0o17
-        assert_eq!(lex_ok("0O17"), vec![TokenKind::NumOctal(15), TokenKind::Eof]);
+        assert_eq!(
+            lex_ok("0O17"),
+            vec![TokenKind::NumOctal(15), TokenKind::Eof]
+        );
     }
 
     #[test]

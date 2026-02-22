@@ -161,6 +161,16 @@ pub fn first_pass(lines: Vec<SourceLine>) -> FirstPassResult {
     }
 }
 
+/// Directive names that can appear as `Label` tokens when written without a leading dot.
+///
+/// Instruction mnemonics (ADD, AND, …) and register names (R0–R7) are NOT listed here
+/// because the lexer already converts them to their own `TokenKind` variants before the
+/// parser or first-pass ever sees them — they can never arrive as `Label(…)` tokens.
+/// Directive names, however, are only recognised when preceded by a `.`; without the dot
+/// they fall through to `Label(…)`, so this check catches the most likely user mistake
+/// of writing e.g. `FILL ADD R1, R2, R3` intending `FILL` as a data label.
+const DIRECTIVE_RESERVED_WORDS: &[&str] = &["ORIG", "END", "FILL", "BLKW", "STRINGZ"];
+
 fn record_label(
     table: &mut SymbolTable,
     label: &str,
@@ -168,6 +178,14 @@ fn record_label(
     span: Span,
     errors: &mut Vec<AsmError>,
 ) {
+    // Flag labels that shadow assembler directives.  These are almost certainly typos
+    // (e.g., `FILL` used as a label instead of `.FILL` as a directive).
+    let upper = label.to_uppercase();
+    if DIRECTIVE_RESERVED_WORDS.contains(&upper.as_str()) {
+        errors.push(AsmError::label_is_reserved_word(label, span));
+        // Still insert so the assembler can continue without cascading UndefinedLabel errors.
+    }
+
     // Single lookup: if Some, it's a duplicate; if None, insert it.
     // The old code called `contains` (hash lookup) then `get` (another lookup).
     if let Some(first_addr) = table.get(label) {

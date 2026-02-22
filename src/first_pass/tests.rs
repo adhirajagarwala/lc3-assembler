@@ -111,3 +111,61 @@ fn orig_with_label() {
     let result = run_first_pass("START .ORIG x3000\nADD R1, R1, #1\n.END\n");
     assert_eq!(result.symbol_table.get("START"), Some(0x3000));
 }
+
+// Instruction mnemonics (ADD, AND, …) and register names (R0–R7) are tokenised by the
+// lexer as their own TokenKind variants, so they can never appear as Label tokens and
+// therefore never reach record_label.  Only bare directive names (without a leading dot)
+// fall through to Label and are checked for reserved-word collisions.
+
+#[test]
+fn label_shadows_directive_fill() {
+    // `FILL` without a dot is a Label token → should be flagged as a reserved word.
+    let result = run_first_pass(".ORIG x3000\nFILL .FILL #0\n.END\n");
+    assert!(
+        result
+            .errors
+            .iter()
+            .any(|e| matches!(e.kind, crate::error::ErrorKind::LabelIsReservedWord)),
+        "Expected LabelIsReservedWord for bare FILL label, got: {:?}",
+        result.errors
+    );
+}
+
+#[test]
+fn label_shadows_directive_blkw() {
+    let result = run_first_pass(".ORIG x3000\nBLKW .BLKW #3\n.END\n");
+    assert!(
+        result
+            .errors
+            .iter()
+            .any(|e| matches!(e.kind, crate::error::ErrorKind::LabelIsReservedWord)),
+        "Expected LabelIsReservedWord for bare BLKW label, got: {:?}",
+        result.errors
+    );
+}
+
+#[test]
+fn label_shadows_directive_stringz() {
+    let result = run_first_pass(".ORIG x3000\nSTRINGZ .STRINGZ \"hi\"\n.END\n");
+    assert!(
+        result
+            .errors
+            .iter()
+            .any(|e| matches!(e.kind, crate::error::ErrorKind::LabelIsReservedWord)),
+        "Expected LabelIsReservedWord for bare STRINGZ label, got: {:?}",
+        result.errors
+    );
+}
+
+#[test]
+fn normal_label_no_reserved_word_error() {
+    // A non-reserved label must not trigger the check.
+    let result = run_first_pass(".ORIG x3000\nLOOP ADD R1, R1, #-1\n.END\n");
+    assert!(
+        !result
+            .errors
+            .iter()
+            .any(|e| matches!(e.kind, crate::error::ErrorKind::LabelIsReservedWord)),
+        "LOOP should not be considered a reserved word"
+    );
+}

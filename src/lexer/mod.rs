@@ -5,7 +5,7 @@
 //! ## Features
 //!
 //! - **Numeric Literals**: Supports decimal (#10, #-5), hexadecimal (x3000, xFFFF),
-//!   and binary (b1010, b1111) notation
+//!   binary (b1010, b1111), and octal (0o777) notation
 //! - **String Literals**: Handles escape sequences (\n, \r, \t, \\, \", \0)
 //! - **Comments**: Line comments starting with semicolon
 //! - **Instructions**: All LC-3 opcodes and pseudo-ops
@@ -427,6 +427,38 @@ fn lex_word(cursor: &mut Cursor, sl: usize, sc: usize) -> Result<Option<Token>, 
                         return Err(AsmError {
                             kind: ErrorKind::InvalidBinaryLiteral,
                             message: format!("Invalid binary literal: {word}"),
+                            span: cursor.make_span(sl, sc),
+                        });
+                    }
+                }
+            }
+
+            // OCTAL LITERAL: 0oNNN or 0ONNN (Rust/Python style), e.g. 0o777
+            if upper.starts_with("0O")
+                && upper.len() > 2
+                && upper[2..].chars().all(|c| matches!(c, '0'..='7'))
+            {
+                let oct_part = &upper[2..];
+                match u32::from_str_radix(oct_part, 8) {
+                    Ok(v) if v <= 0xFFFF => {
+                        let value = u16_to_twos_complement(v);
+                        return Ok(Some(Token {
+                            kind: TokenKind::NumOctal(value),
+                            lexeme: word,
+                            span: cursor.make_span(sl, sc),
+                        }));
+                    }
+                    Ok(_) => {
+                        return Err(AsmError {
+                            kind: ErrorKind::InvalidOctalLiteral,
+                            message: format!("Octal literal {word} exceeds 16 bits"),
+                            span: cursor.make_span(sl, sc),
+                        });
+                    }
+                    Err(_) => {
+                        return Err(AsmError {
+                            kind: ErrorKind::InvalidOctalLiteral,
+                            message: format!("Invalid octal literal: {word}"),
                             span: cursor.make_span(sl, sc),
                         });
                     }

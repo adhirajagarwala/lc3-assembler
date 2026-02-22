@@ -134,7 +134,15 @@ impl<'a> Encoder<'a> {
             }
             LineContent::Stringz(s) => {
                 for ch in s.chars() {
-                    self.emit(ch as u16);
+                    if !ch.is_ascii() {
+                        self.errors
+                            .push(AsmError::non_ascii_in_stringz(ch, line.span));
+                        // Continue encoding so downstream errors are still caught.
+                        // Emit the low byte to keep the word count predictable.
+                        self.emit(ch as u8 as u16);
+                    } else {
+                        self.emit(ch as u16);
+                    }
                 }
                 self.emit(0); // Null terminator
             }
@@ -777,6 +785,38 @@ mod tests {
         let result = encode(&fp);
         assert!(result.errors.is_empty());
         assert_eq!(result.machine_code, vec![0x00]);
+    }
+
+    #[test]
+    fn encode_stringz_non_ascii_errors() {
+        // .STRINGZ "café" → 'c', 'a', 'f' are ASCII; 'é' (U+00E9) is not
+        let fp = build_first_pass(
+            0x3000,
+            vec![LineContent::Stringz("café".into())],
+            SymbolTable::new(),
+        );
+        let result = encode(&fp);
+        assert_eq!(result.errors.len(), 1);
+        assert_eq!(result.errors[0].kind, crate::error::ErrorKind::NonAsciiInStringz);
+        // Word count is still 5: 'c','a','f','é'(low byte),'\\0'
+        assert_eq!(result.machine_code.len(), 5);
+        assert_eq!(result.machine_code[0], b'c' as u16);
+        assert_eq!(result.machine_code[3], 0x00E9u32 as u8 as u16); // low byte of é
+        assert_eq!(*result.machine_code.last().unwrap(), 0x0000); // null terminator
+    }
+
+    #[test]
+    fn encode_stringz_all_ascii_no_error() {
+        // Full printable ASCII range should produce zero errors
+        let s: String = (0x20u8..=0x7Eu8).map(|b| b as char).collect();
+        let fp = build_first_pass(
+            0x3000,
+            vec![LineContent::Stringz(s.clone())],
+            SymbolTable::new(),
+        );
+        let result = encode(&fp);
+        assert!(result.errors.is_empty(), "pure ASCII should not error");
+        assert_eq!(result.machine_code.len(), s.len() + 1); // chars + null
     }
 
     // ---------------------------------------------------------------

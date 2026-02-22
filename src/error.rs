@@ -70,6 +70,26 @@ impl AsmError {
             span,
         )
     }
+
+    pub fn non_ascii_in_stringz(ch: char, span: Span) -> Self {
+        Self::new(
+            ErrorKind::NonAsciiInStringz,
+            format!(
+                "Character '{ch}' (U+{:04X}) in .STRINGZ is not ASCII; \
+                 LC-3 only supports characters 0x00–0x7F",
+                ch as u32
+            ),
+            span,
+        )
+    }
+
+    pub fn label_is_reserved_word(label: &str, span: Span) -> Self {
+        Self::new(
+            ErrorKind::LabelIsReservedWord,
+            format!("Label '{label}' shadows an assembler directive name; prefix it with '.' or rename it"),
+            span,
+        )
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -79,6 +99,7 @@ pub enum ErrorKind {
     InvalidDecimalLiteral,
     InvalidHexLiteral,
     InvalidBinaryLiteral,
+    InvalidOctalLiteral,
     InvalidRegister,
     UnknownDirective,
     UnexpectedCharacter,
@@ -100,10 +121,10 @@ pub enum ErrorKind {
     InvalidOrigAddress,
     InvalidBlkwCount,
     AddressOverflow,
-    // LabelIsReservedWord was removed — the check for reserved-word labels was never
-    // implemented. Re-add it when the validation is actually coded (see feature gap 8.1).
     UndefinedLabel,
     OffsetOutOfRange,
+    NonAsciiInStringz,   // feature 8.9: non-ASCII char in .STRINGZ
+    LabelIsReservedWord, // feature 8.1: label shadows a directive name
 }
 
 impl std::fmt::Display for ErrorKind {
@@ -114,6 +135,7 @@ impl std::fmt::Display for ErrorKind {
             Self::InvalidDecimalLiteral => "invalid decimal literal",
             Self::InvalidHexLiteral => "invalid hex literal",
             Self::InvalidBinaryLiteral => "invalid binary literal",
+            Self::InvalidOctalLiteral => "invalid octal literal",
             Self::InvalidRegister => "invalid register",
             Self::UnknownDirective => "unknown directive",
             Self::UnexpectedCharacter => "unexpected character",
@@ -133,6 +155,8 @@ impl std::fmt::Display for ErrorKind {
             Self::AddressOverflow => "address overflow",
             Self::UndefinedLabel => "undefined label",
             Self::OffsetOutOfRange => "PC offset out of range",
+            Self::NonAsciiInStringz => "non-ASCII character in .STRINGZ",
+            Self::LabelIsReservedWord => "label shadows a reserved word",
         };
         f.write_str(s)
     }

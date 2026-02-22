@@ -10,8 +10,10 @@ repository = "https://github.com/adhirajagarwala/lc3-assembler"
 license = "MIT"
 keywords = ["lc3", "assembler", "computer-architecture", "education", "compiler"]
 categories = ["command-line-utilities", "development-tools", "education"]
-# 1.70 is the minimum that supports: format string capture syntax (1.58),
-# Cargo.lock v4 (1.68), and the CI toolchain matrix used in workflows.
+# 1.70 is the minimum that supports format string capture syntax (1.58)
+# and is the oldest version in the CI test matrix.
+# Note: Cargo.lock is committed as v4 (Cargo 1.78+); the MSRV CI job
+# deletes it so Cargo 1.70 can regenerate a v3-compatible file.
 rust-version = "1.70"
 
 [[bin]]

@@ -503,6 +503,7 @@ pub(crate) fn token_to_i32(token: &Token) -> Option<i32> {
         TokenKind::NumDecimal(v) => Some(*v),
         TokenKind::NumHex(v) => Some(*v),
         TokenKind::NumBinary(v) => Some(*v),
+        TokenKind::NumOctal(v) => Some(*v),
         _ => None,
     }
 }

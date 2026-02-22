@@ -82,13 +82,13 @@ jobs:
       matrix:
         include:
           # Linux x86_64
-          - os: ubuntu-20.04
+          - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             artifact_name: lc3-assembler
             asset_name: lc3-assembler-linux-x64
 
           # Linux x86_64 (musl for static linking)
-          - os: ubuntu-20.04
+          - os: ubuntu-22.04
             target: x86_64-unknown-linux-musl
             artifact_name: lc3-assembler
             asset_name: lc3-assembler-linux-x64-musl

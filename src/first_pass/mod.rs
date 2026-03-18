@@ -26,7 +26,8 @@ pub mod symbol_table;
 mod tests;
 
 use crate::error::{AsmError, ErrorKind, Span};
-use crate::parser::ast::{LineContent, SourceLine};
+use crate::parser::ast::{Instruction, LineContent, SourceLine};
+use crate::warning::AsmWarning;
 use symbol_table::SymbolTable;
 
 pub struct FirstPassResult {
@@ -34,6 +35,7 @@ pub struct FirstPassResult {
     pub source_lines: Vec<SourceLine>,
     pub orig_address: u16,
     pub errors: Vec<AsmError>,
+    pub warnings: Vec<AsmWarning>,
 }
 
 impl FirstPassResult {
@@ -153,11 +155,72 @@ pub fn first_pass(lines: Vec<SourceLine>) -> FirstPassResult {
         ));
     }
 
+    // Detect unreachable code: instructions that follow an unconditional
+    // terminator (HALT or BRnzp) within the same program body.
+    let warnings = detect_unreachable_code(&lines);
+
     FirstPassResult {
         symbol_table,
         source_lines: lines, // No clone needed — we own the Vec
         orig_address,
         errors,
+        warnings,
+    }
+}
+
+/// Returns warnings for instructions that can never be executed because they
+/// follow an unconditional HALT or BRnzp branch.
+fn detect_unreachable_code(lines: &[SourceLine]) -> Vec<AsmWarning> {
+    let mut warnings = Vec::new();
+    let mut after_terminator = false;
+
+    for line in lines {
+        match &line.content {
+            LineContent::Orig(_) | LineContent::End | LineContent::Empty => {
+                // Structural lines — reset or ignore
+                if matches!(line.content, LineContent::End) {
+                    after_terminator = false;
+                }
+            }
+            content => {
+                if after_terminator {
+                    // A labeled line is always reachable — something can branch to it.
+                    // Only warn on unlabeled instructions/data in dead code.
+                    if line.label.is_none() && !matches!(content, LineContent::Empty) {
+                        warnings.push(AsmWarning::unreachable_code(line.span));
+                        // Only warn once per "dead block" — reset so we don't
+                        // flood every subsequent line with warnings.
+                    }
+                    // A label (whether or not we warned) re-opens the live code window.
+                    if line.label.is_some() {
+                        after_terminator = false;
+                    }
+                }
+                // Check if this line itself is a terminator
+                if is_unconditional_terminator(content) {
+                    after_terminator = true;
+                }
+            }
+        }
+    }
+    warnings
+}
+
+/// Returns `true` for instructions that unconditionally transfer control and
+/// after which no following instruction can be reached.
+fn is_unconditional_terminator(content: &LineContent) -> bool {
+    match content {
+        LineContent::Instruction(Instruction::Halt)
+        | LineContent::Instruction(Instruction::Ret)
+        | LineContent::Instruction(Instruction::Rti)
+        // JMP always transfers control regardless of condition codes.
+        // (JSRR is a call that returns, so it's not a terminator.)
+        | LineContent::Instruction(Instruction::Jmp { .. }) => true,
+        // BRnzp is an unconditional branch (all three flags set)
+        LineContent::Instruction(Instruction::Br { flags, .. }) => {
+            flags.n && flags.z && flags.p
+        }
+        _ => false,
     }
 }
 

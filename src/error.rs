@@ -123,8 +123,10 @@ pub enum ErrorKind {
     AddressOverflow,
     UndefinedLabel,
     OffsetOutOfRange,
-    NonAsciiInStringz,   // feature 8.9: non-ASCII char in .STRINGZ
-    LabelIsReservedWord, // feature 8.1: label shadows a directive name
+    NonAsciiInStringz,   // non-ASCII char in .STRINGZ
+    LabelIsReservedWord, // label shadows a directive name
+    IoError,             // file I/O error (used by preprocessor for .INCLUDE)
+    MacroError,          // macro definition/invocation error
 }
 
 impl std::fmt::Display for ErrorKind {
@@ -157,6 +159,8 @@ impl std::fmt::Display for ErrorKind {
             Self::OffsetOutOfRange => "PC offset out of range",
             Self::NonAsciiInStringz => "non-ASCII character in .STRINGZ",
             Self::LabelIsReservedWord => "label shadows a reserved word",
+            Self::IoError => "I/O error",
+            Self::MacroError => "macro error",
         };
         f.write_str(s)
     }

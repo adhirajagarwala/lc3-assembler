@@ -21,6 +21,7 @@
 use crate::error::{AsmError, ErrorKind, Span};
 use crate::first_pass::{symbol_table::SymbolTable, FirstPassResult};
 use crate::parser::ast::{Instruction, LineContent, SourceLine};
+use crate::warning::AsmWarning;
 
 // LC-3 opcode constants — bits 15:12 of every instruction word.
 const OP_ADD: u16 = 0b0001;
@@ -47,6 +48,17 @@ const TRAP_IN: u16 = (OP_TRAP << 12) | 0x23;
 const TRAP_PUTSP: u16 = (OP_TRAP << 12) | 0x24;
 const TRAP_HALT: u16 = (OP_TRAP << 12) | 0x25;
 
+/// Per-source-line encoding metadata used by the listing generator.
+#[derive(Debug, Clone)]
+pub struct LineInfo {
+    /// Address of the first word produced by this source line.
+    pub address: u16,
+    /// All machine-code words produced by this line (0 for empty/directives).
+    pub words: Vec<u16>,
+    /// Index into `FirstPassResult::source_lines`.
+    pub source_line_idx: usize,
+}
+
 /// Result of the encoding process
 pub struct EncodeResult {
     /// Generated machine code as 16-bit words
@@ -55,6 +67,10 @@ pub struct EncodeResult {
     pub orig_address: u16,
     /// Errors encountered during encoding
     pub errors: Vec<AsmError>,
+    /// Warnings produced during encoding (e.g. unused labels).
+    pub warnings: Vec<AsmWarning>,
+    /// Per-source-line metadata for listing file generation.
+    pub line_infos: Vec<LineInfo>,
 }
 
 impl EncodeResult {
@@ -81,14 +97,34 @@ impl EncodeResult {
 pub fn encode(first_pass: &FirstPassResult) -> EncodeResult {
     let mut encoder = Encoder::new(&first_pass.symbol_table, first_pass.orig_address);
 
-    for line in &first_pass.source_lines {
-        encoder.encode_line(line);
+    for (idx, line) in first_pass.source_lines.iter().enumerate() {
+        encoder.encode_line(line, idx);
+    }
+
+    // Detect unused labels: labels defined in the symbol table but never
+    // resolved during encoding. .ORIG labels (address == orig_address for
+    // the very first label) are included — if you name the origin and never
+    // reference it, it's still unused.
+    let mut warnings = Vec::new();
+    for (name, _addr) in first_pass.symbol_table.iter() {
+        if !encoder.resolved_labels.contains(name) {
+            // Find the span for this label by scanning source lines
+            let span = first_pass
+                .source_lines
+                .iter()
+                .find(|sl| sl.label.as_deref() == Some(name))
+                .map(|sl| sl.span)
+                .unwrap_or(crate::error::Span { line: 1, col: 1 });
+            warnings.push(AsmWarning::unused_label(name, span));
+        }
     }
 
     EncodeResult {
         machine_code: encoder.machine_code,
         orig_address: encoder.orig_address,
         errors: encoder.errors,
+        warnings,
+        line_infos: encoder.line_infos,
     }
 }
 
@@ -98,6 +134,10 @@ struct Encoder<'a> {
     orig_address: u16,
     current_address: u16,
     errors: Vec<AsmError>,
+    /// Labels successfully looked up during encoding (for unused-label detection).
+    resolved_labels: std::collections::HashSet<String>,
+    /// Per-source-line metadata for the listing file.
+    line_infos: Vec<LineInfo>,
 }
 
 impl<'a> Encoder<'a> {
@@ -108,10 +148,15 @@ impl<'a> Encoder<'a> {
             orig_address,
             current_address: orig_address,
             errors: Vec::new(),
+            resolved_labels: std::collections::HashSet::new(),
+            line_infos: Vec::new(),
         }
     }
 
-    fn encode_line(&mut self, line: &SourceLine) {
+    fn encode_line(&mut self, line: &SourceLine, source_line_idx: usize) {
+        let start_addr = self.current_address;
+        let start_len  = self.machine_code.len();
+
         match &line.content {
             LineContent::Empty => {}
             LineContent::Orig(_) => {} // Already handled in first pass
@@ -120,10 +165,12 @@ impl<'a> Encoder<'a> {
                 self.emit(*value as u16);
             }
             LineContent::FillLabel(label) => match self.symbol_table.get(label) {
-                Some(addr) => self.emit(addr),
+                Some(addr) => {
+                    self.resolved_labels.insert(label.clone());
+                    self.emit(addr);
+                }
                 None => {
-                    self.errors
-                        .push(AsmError::undefined_label(label, line.span));
+                    self.errors.push(AsmError::undefined_label(label, line.span));
                     self.emit(0);
                 }
             },
@@ -135,14 +182,12 @@ impl<'a> Encoder<'a> {
             LineContent::Stringz(s) => {
                 for ch in s.chars() {
                     if !ch.is_ascii() {
-                        self.errors
-                            .push(AsmError::non_ascii_in_stringz(ch, line.span));
-                        // Continue encoding so downstream errors are still caught.
-                        // Emit the low byte to keep the word count predictable.
-                        self.emit(ch as u8 as u16);
-                    } else {
-                        self.emit(ch as u16);
+                        self.errors.push(AsmError::non_ascii_in_stringz(ch, line.span));
                     }
+                    // Cast through u32 → u16 to preserve all 16 bits of the Unicode
+                    // scalar value (up to U+FFFF). The old `ch as u8 as u16` silently
+                    // discarded bits 8–15 for any character above U+00FF.
+                    self.emit(ch as u32 as u16);
                 }
                 self.emit(0); // Null terminator
             }
@@ -150,6 +195,10 @@ impl<'a> Encoder<'a> {
                 self.encode_instruction(inst, line.span);
             }
         }
+
+        // Record per-line metadata for the listing generator
+        let words: Vec<u16> = self.machine_code[start_len..].to_vec();
+        self.line_infos.push(LineInfo { address: start_addr, words, source_line_idx });
     }
 
     fn encode_instruction(&mut self, inst: &Instruction, span: Span) {
@@ -261,8 +310,10 @@ impl<'a> Encoder<'a> {
     /// The offset must fit in the specified number of bits as a signed value.
     /// For example, with 9 bits: range is -256 to +255
     fn calc_pc_offset(&mut self, label: &str, bits: u8, span: Span) -> u16 {
+        // Track every successfully resolved label for unused-label analysis.
         match self.symbol_table.get(label) {
             Some(target_addr) => {
+                self.resolved_labels.insert(label.to_string());
                 // PC will point to next instruction during execution
                 let pc = self.current_address.wrapping_add(1);
 
@@ -350,6 +401,7 @@ mod tests {
             source_lines: lines,
             orig_address: orig,
             errors: Vec::new(),
+            warnings: Vec::new(),
         }
     }
 
@@ -801,10 +853,10 @@ mod tests {
             result.errors[0].kind,
             crate::error::ErrorKind::NonAsciiInStringz
         );
-        // Word count is still 5: 'c','a','f','é'(low byte),'\\0'
+        // Word count is still 5: 'c','a','f','é','\\0'
         assert_eq!(result.machine_code.len(), 5);
         assert_eq!(result.machine_code[0], b'c' as u16);
-        assert_eq!(result.machine_code[3], 0x00E9u32 as u8 as u16); // low byte of é
+        assert_eq!(result.machine_code[3], 0x00E9); // é = U+00E9 stored as u16
         assert_eq!(*result.machine_code.last().unwrap(), 0x0000); // null terminator
     }
 

@@ -46,14 +46,6 @@ impl SymbolTable {
         self.entries.is_empty()
     }
 
-    pub fn print_table(&self) {
-        println!("//\tSymbol Name\tAddress");
-        println!("//\t-----------\t-------");
-        for (label, addr) in &self.entries {
-            println!("//\t{label}\t\tx{addr:04X}");
-        }
-    }
-
     pub fn iter(&self) -> impl Iterator<Item = (&str, u16)> {
         self.entries.iter().map(|(l, a)| (l.as_str(), *a))
     }

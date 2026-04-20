@@ -250,7 +250,11 @@ fn parse_macro_header(line: &str) -> Option<MacroDef> {
         Vec::new()
     };
 
-    Some(MacroDef { name, params, body: Vec::new() })
+    Some(MacroDef {
+        name,
+        params,
+        body: Vec::new(),
+    })
 }
 
 /// Returns `true` if `line` is a `.ENDM` directive.
@@ -305,8 +309,7 @@ fn parse_macro_call(line: &str) -> Option<(String, Vec<String>)> {
 /// Split a line into its first whitespace-delimited token and the remainder.
 fn split_first_token(s: &str) -> (&str, &str) {
     let s = s.trim_start();
-    let end = s.find(|c: char| c.is_whitespace())
-        .unwrap_or(s.len());
+    let end = s.find(|c: char| c.is_whitespace()).unwrap_or(s.len());
     (&s[..end], s[end..].trim_start())
 }
 
@@ -392,9 +395,19 @@ HALT_NOW
 ";
         let r = expand_str(src);
         assert!(!r.has_errors(), "errors: {:?}", r.errors);
-        assert!(r.source.contains("HALT"), "body should appear: {}", r.source);
-        assert!(!r.source.to_uppercase().contains(".MACRO"), "definition should be stripped");
-        assert!(!r.source.to_uppercase().contains(".ENDM"), "endm should be stripped");
+        assert!(
+            r.source.contains("HALT"),
+            "body should appear: {}",
+            r.source
+        );
+        assert!(
+            !r.source.to_uppercase().contains(".MACRO"),
+            "definition should be stripped"
+        );
+        assert!(
+            !r.source.to_uppercase().contains(".ENDM"),
+            "endm should be stripped"
+        );
     }
 
     // ── Parameterised macro ───────────────────────────────────────────────────
@@ -412,8 +425,16 @@ CLR R1
 ";
         let r = expand_str(src);
         assert!(!r.has_errors(), "errors: {:?}", r.errors);
-        assert!(r.source.contains("AND R0, R0, #0"), "R0 substitution: {}", r.source);
-        assert!(r.source.contains("AND R1, R1, #0"), "R1 substitution: {}", r.source);
+        assert!(
+            r.source.contains("AND R0, R0, #0"),
+            "R0 substitution: {}",
+            r.source
+        );
+        assert!(
+            r.source.contains("AND R1, R1, #0"),
+            "R1 substitution: {}",
+            r.source
+        );
     }
 
     // ── Wrong argument count ──────────────────────────────────────────────────
@@ -455,7 +476,9 @@ CLR
         let src = ".ORIG x3000\n.ENDM\nHALT\n.END\n";
         let r = expand_str(src);
         assert!(r.has_errors());
-        assert!(r.errors[0].message.contains(".ENDM without a preceding .MACRO"));
+        assert!(r.errors[0]
+            .message
+            .contains(".ENDM without a preceding .MACRO"));
     }
 
     // ── Recursive self-invocation ─────────────────────────────────────────────
@@ -494,8 +517,11 @@ HALT
         assert!(r.has_errors());
         assert!(r.errors[0].message.contains("nested .MACRO"));
         // The nested .MACRO line must NOT appear in the expanded output
-        assert!(!r.source.to_uppercase().contains(".MACRO INNER"),
-            "nested .MACRO header leaked into output: {}", r.source);
+        assert!(
+            !r.source.to_uppercase().contains(".MACRO INNER"),
+            "nested .MACRO header leaked into output: {}",
+            r.source
+        );
     }
 
     // ── substitute_params ─────────────────────────────────────────────────────

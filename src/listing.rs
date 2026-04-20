@@ -46,7 +46,10 @@ pub fn generate(
     out.push_str(&format!("LC-3 Assembler Listing — {filename}\n"));
     out.push_str(&sep);
     out.push('\n');
-    out.push_str(&format!("{:>6}  {:>4}  {:>6}  {}\n", "Addr", "Code", "Line", "Source"));
+    out.push_str(&format!(
+        "{:>6}  {:>4}  {:>6}  {}\n",
+        "Addr", "Code", "Line", "Source"
+    ));
     out.push_str(&sep);
     out.push('\n');
 
@@ -54,7 +57,10 @@ pub fn generate(
     for info in &encoded.line_infos {
         let sl = &first.source_lines[info.source_line_idx];
         let line_num = sl.span.line;
-        let src_text = raw_lines.get(line_num.saturating_sub(1)).copied().unwrap_or("");
+        let src_text = raw_lines
+            .get(line_num.saturating_sub(1))
+            .copied()
+            .unwrap_or("");
 
         match info.words.as_slice() {
             // Lines that produce no words (Empty, .END, labels-only)

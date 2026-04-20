@@ -155,7 +155,7 @@ impl<'a> Encoder<'a> {
 
     fn encode_line(&mut self, line: &SourceLine, source_line_idx: usize) {
         let start_addr = self.current_address;
-        let start_len  = self.machine_code.len();
+        let start_len = self.machine_code.len();
 
         match &line.content {
             LineContent::Empty => {}
@@ -170,7 +170,8 @@ impl<'a> Encoder<'a> {
                     self.emit(addr);
                 }
                 None => {
-                    self.errors.push(AsmError::undefined_label(label, line.span));
+                    self.errors
+                        .push(AsmError::undefined_label(label, line.span));
                     self.emit(0);
                 }
             },
@@ -182,7 +183,8 @@ impl<'a> Encoder<'a> {
             LineContent::Stringz(s) => {
                 for ch in s.chars() {
                     if !ch.is_ascii() {
-                        self.errors.push(AsmError::non_ascii_in_stringz(ch, line.span));
+                        self.errors
+                            .push(AsmError::non_ascii_in_stringz(ch, line.span));
                     }
                     // Cast through u32 → u16 to preserve all 16 bits of the Unicode
                     // scalar value (up to U+FFFF). The old `ch as u8 as u16` silently
@@ -198,7 +200,11 @@ impl<'a> Encoder<'a> {
 
         // Record per-line metadata for the listing generator
         let words: Vec<u16> = self.machine_code[start_len..].to_vec();
-        self.line_infos.push(LineInfo { address: start_addr, words, source_line_idx });
+        self.line_infos.push(LineInfo {
+            address: start_addr,
+            words,
+            source_line_idx,
+        });
     }
 
     fn encode_instruction(&mut self, inst: &Instruction, span: Span) {

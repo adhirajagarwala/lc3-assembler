@@ -28,7 +28,7 @@ pub enum WarnKind {
 impl std::fmt::Display for WarnKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::UnusedLabel     => write!(f, "unused label"),
+            Self::UnusedLabel => write!(f, "unused label"),
             Self::UnreachableCode => write!(f, "unreachable code"),
         }
     }
@@ -38,14 +38,18 @@ impl std::fmt::Display for WarnKind {
 
 #[derive(Debug, Clone)]
 pub struct AsmWarning {
-    pub kind:    WarnKind,
+    pub kind: WarnKind,
     pub message: String,
-    pub span:    Span,
+    pub span: Span,
 }
 
 impl AsmWarning {
     pub fn new(kind: WarnKind, message: impl Into<String>, span: Span) -> Self {
-        Self { kind, message: message.into(), span }
+        Self {
+            kind,
+            message: message.into(),
+            span,
+        }
     }
 
     pub fn unused_label(name: &str, span: Span) -> Self {

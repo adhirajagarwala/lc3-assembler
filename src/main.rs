@@ -92,7 +92,13 @@ impl Args {
             std::process::exit(1);
         };
 
-        Args { input, output, listing: listing_path, check, no_color }
+        Args {
+            input,
+            output,
+            listing: listing_path,
+            check,
+            no_color,
+        }
     }
 }
 
@@ -124,24 +130,38 @@ fn main() {
 
     // Convert preprocessor errors to AsmError so they flow through the same
     // diagnostic machinery as everything else.
-    let prep_errors: Vec<AsmError> = prep.errors.iter().map(|e| {
-        AsmError::new(
-            ErrorKind::IoError,
-            e.message.clone(),
-            Span { line: e.line.max(1), col: 1 },
-        )
-    }).collect();
+    let prep_errors: Vec<AsmError> = prep
+        .errors
+        .iter()
+        .map(|e| {
+            AsmError::new(
+                ErrorKind::IoError,
+                e.message.clone(),
+                Span {
+                    line: e.line.max(1),
+                    col: 1,
+                },
+            )
+        })
+        .collect();
 
     // ── Stage 1: Macro expansion ─────────────────────────────────────────────
 
     let macro_result = macro_expand::expand(&prep.source);
-    let macro_errors: Vec<AsmError> = macro_result.errors.iter().map(|e| {
-        AsmError::new(
-            ErrorKind::MacroError,
-            e.message.clone(),
-            Span { line: e.line.max(1), col: 1 },
-        )
-    }).collect();
+    let macro_errors: Vec<AsmError> = macro_result
+        .errors
+        .iter()
+        .map(|e| {
+            AsmError::new(
+                ErrorKind::MacroError,
+                e.message.clone(),
+                Span {
+                    line: e.line.max(1),
+                    col: 1,
+                },
+            )
+        })
+        .collect();
 
     // Use the macro-expanded source for all downstream stages.
     //
@@ -161,9 +181,9 @@ fn main() {
 
     // ── Stage 2–5: Lex → Parse → First pass → Encode ─────────────────────────
 
-    let lexed   = tokenize(&expanded_source);
-    let parsed  = parse_lines(&lexed.tokens);
-    let first   = first_pass(parsed.lines);
+    let lexed = tokenize(&expanded_source);
+    let parsed = parse_lines(&lexed.tokens);
+    let first = first_pass(parsed.lines);
     let encoded = encode(&first);
 
     // ── Diagnostics ──────────────────────────────────────────────────────────
@@ -171,11 +191,11 @@ fn main() {
     // Use the *original* source for diagnostics (line numbers from prep/macro
     // stages point into the original file; lex/parse/encode point into the
     // expanded source, which only differs when macros/includes were used).
-    let diag = RichDiagnostics::new(&source, &display_name)
-        .with_color(!args.no_color);
+    let diag = RichDiagnostics::new(&source, &display_name).with_color(!args.no_color);
 
     // Collect all errors (preprocess → macro → lex → parse → first-pass → encode)
-    let all_errors: Vec<_> = prep_errors.iter()
+    let all_errors: Vec<_> = prep_errors
+        .iter()
         .chain(macro_errors.iter())
         .chain(lexed.errors.iter())
         .chain(parsed.errors.iter())
@@ -185,7 +205,8 @@ fn main() {
 
     // Collect all warnings (first-pass → encode)
     let all_warnings: Vec<_> = first
-        .warnings.iter()
+        .warnings
+        .iter()
         .chain(encoded.warnings.iter())
         .cloned()
         .collect();
@@ -229,17 +250,17 @@ fn main() {
 
     if args.input == "-" && args.output.is_none() {
         // stdin → stdout (binary)
-        write_obj_stdout(encoded.orig_address, &encoded.machine_code)
-            .unwrap_or_else(|err| {
-                eprintln!("error: failed to write to stdout: {err}");
-                std::process::exit(1);
-            });
+        write_obj_stdout(encoded.orig_address, &encoded.machine_code).unwrap_or_else(|err| {
+            eprintln!("error: failed to write to stdout: {err}");
+            std::process::exit(1);
+        });
     } else {
-        write_obj_file(&output_path, encoded.orig_address, &encoded.machine_code)
-            .unwrap_or_else(|err| {
+        write_obj_file(&output_path, encoded.orig_address, &encoded.machine_code).unwrap_or_else(
+            |err| {
                 eprintln!("error: failed to write '{}': {err}", output_path);
                 std::process::exit(1);
-            });
+            },
+        );
     }
 
     // ── Write listing file ────────────────────────────────────────────────────
@@ -257,16 +278,28 @@ fn main() {
     let warnings_note = if all_warnings.is_empty() {
         String::new()
     } else {
-        format!(" ({} warning{})", all_warnings.len(), if all_warnings.len() == 1 { "" } else { "s" })
+        format!(
+            " ({} warning{})",
+            all_warnings.len(),
+            if all_warnings.len() == 1 { "" } else { "s" }
+        )
     };
 
     if args.input != "-" || args.output.is_some() {
         eprintln!(
             "assembled '{}' → '{}'  [{} word{}, origin x{:04X}]{}",
             display_name,
-            if args.input == "-" { args.output.as_deref().unwrap_or("-") } else { &output_path },
+            if args.input == "-" {
+                args.output.as_deref().unwrap_or("-")
+            } else {
+                &output_path
+            },
             encoded.machine_code.len(),
-            if encoded.machine_code.len() == 1 { "" } else { "s" },
+            if encoded.machine_code.len() == 1 {
+                ""
+            } else {
+                "s"
+            },
             encoded.orig_address,
             warnings_note,
         );

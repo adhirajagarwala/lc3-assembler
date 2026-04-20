@@ -22,6 +22,7 @@
 //! ```
 
 use crate::encoder::EncodeResult;
+use crate::first_pass::symbol_table::SymbolTable;
 use crate::first_pass::FirstPassResult;
 
 /// Generate a listing string from the assembled program.
@@ -105,5 +106,49 @@ pub fn generate(
         encoded.machine_code.len() * 2,
     ));
 
+    // Append symbol table section if there are any symbols
+    if !first.symbol_table.is_empty() {
+        out.push('\n');
+        append_symbol_table(&mut out, &first.symbol_table);
+    }
+
+    out
+}
+
+/// Append a human-readable symbol table section (sorted by address) to `out`.
+fn append_symbol_table(out: &mut String, table: &SymbolTable) {
+    let sep = "─".repeat(34);
+    out.push_str("Symbol Table\n");
+    out.push_str(&sep);
+    out.push('\n');
+    out.push_str(&format!("  {:<20}  {}\n", "Label", "Address"));
+    out.push_str(&sep);
+    out.push('\n');
+    for (label, addr) in table.sorted_by_address() {
+        out.push_str(&format!("  {:<20}  x{:04X}\n", label, addr));
+    }
+    out.push_str(&sep);
+    out.push('\n');
+}
+
+/// Generate a standalone `.sym` file (labels sorted alphabetically).
+///
+/// The format is designed to be both human-readable and machine-parseable:
+/// each non-comment line is `LABEL=x<ADDR>`.
+#[must_use]
+pub fn generate_sym_file(table: &SymbolTable, filename: &str) -> String {
+    let mut out = String::new();
+    out.push_str(&format!("; LC-3 Symbol Table — {filename}\n"));
+    out.push_str(&format!(
+        "; {} symbol{}\n",
+        table.len(),
+        if table.len() == 1 { "" } else { "s" }
+    ));
+    out.push_str(";\n");
+    out.push_str("; Label                Address\n");
+    out.push_str("; ─────────────────────────────\n");
+    for (label, addr) in table.sorted_by_name() {
+        out.push_str(&format!("{label}=x{addr:04X}\n"));
+    }
     out
 }

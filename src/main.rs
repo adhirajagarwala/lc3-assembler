@@ -14,13 +14,26 @@ use lc3_assembler::preprocessor;
 
 // ── CLI argument parsing ──────────────────────────────────────────────────────
 
+/// Output format for the assembled machine code.
+#[derive(Clone, Copy, PartialEq)]
+enum EmitFormat {
+    /// LC-3 binary object file: big-endian origin word + code words (default).
+    Obj,
+    /// Intel HEX ASCII text — portable across tools/simulators.
+    Hex,
+}
+
 struct Args {
     /// Path to input .asm file, or "-" for stdin.
     input: String,
-    /// Path for the output .obj file.  None = auto-derive from input.
+    /// Path for the output file.  None = auto-derive from input.
     output: Option<String>,
     /// Path for an optional listing (.lst) file.
     listing: Option<String>,
+    /// Path for an optional symbol-table (.sym) file.
+    symbols: Option<String>,
+    /// Output format (binary obj or Intel HEX).
+    emit: EmitFormat,
     /// Validate-only; do not write any output files.
     check: bool,
     /// Disable ANSI colour output regardless of TTY detection.
@@ -45,6 +58,8 @@ impl Args {
         let mut input: Option<String> = None;
         let mut output: Option<String> = None;
         let mut listing_path: Option<String> = None;
+        let mut symbols_path: Option<String> = None;
+        let mut emit = EmitFormat::Obj;
         let mut check = false;
         let mut no_color = false;
 
@@ -66,6 +81,29 @@ impl Args {
                         std::process::exit(1);
                     }
                     listing_path = Some(args[i].to_string());
+                }
+                "-s" | "--symbols" => {
+                    i += 1;
+                    if i >= args.len() {
+                        eprintln!("error: -s requires a filename argument");
+                        std::process::exit(1);
+                    }
+                    symbols_path = Some(args[i].to_string());
+                }
+                "--emit" => {
+                    i += 1;
+                    if i >= args.len() {
+                        eprintln!("error: --emit requires a format argument (obj|hex)");
+                        std::process::exit(1);
+                    }
+                    emit = match args[i] {
+                        "obj" => EmitFormat::Obj,
+                        "hex" => EmitFormat::Hex,
+                        other => {
+                            eprintln!("error: unknown emit format '{other}' (expected: obj, hex)");
+                            std::process::exit(1);
+                        }
+                    };
                 }
                 "--check" => {
                     check = true;
@@ -96,6 +134,8 @@ impl Args {
             input,
             output,
             listing: listing_path,
+            symbols: symbols_path,
+            emit,
             check,
             no_color,
         }
@@ -224,43 +264,84 @@ fn main() {
     // ── Check mode: stop here (no file output) ────────────────────────────────
 
     if args.check {
-        // Print a brief success summary and exit cleanly
-        eprintln!("ok — '{}' assembles without errors", display_name);
+        if all_warnings.is_empty() {
+            eprintln!(
+                "ok — '{}' assembles without errors or warnings",
+                display_name
+            );
+        } else {
+            eprintln!(
+                "ok — '{}' assembles without errors ({} warning{})",
+                display_name,
+                all_warnings.len(),
+                if all_warnings.len() == 1 { "" } else { "s" }
+            );
+        }
         std::process::exit(0);
     }
 
     // ── Determine output path ────────────────────────────────────────────────
 
+    let default_ext = match args.emit {
+        EmitFormat::Obj => "obj",
+        EmitFormat::Hex => "hex",
+    };
+
     let output_path: String = match &args.output {
         Some(p) => p.clone(),
         None => {
             if args.input == "-" {
-                // stdin input: write to stdout in binary (pipe-friendly)
-                "".to_string() // handled below
+                "".to_string() // handled below (stdout)
             } else {
                 Path::new(&args.input)
-                    .with_extension("obj")
+                    .with_extension(default_ext)
                     .to_string_lossy()
                     .into_owned()
             }
         }
     };
 
-    // ── Write .obj file ───────────────────────────────────────────────────────
+    // ── Write output file ─────────────────────────────────────────────────────
 
     if args.input == "-" && args.output.is_none() {
-        // stdin → stdout (binary)
-        write_obj_stdout(encoded.orig_address, &encoded.machine_code).unwrap_or_else(|err| {
-            eprintln!("error: failed to write to stdout: {err}");
-            std::process::exit(1);
-        });
+        // stdin → stdout
+        match args.emit {
+            EmitFormat::Obj => {
+                write_obj_stdout(encoded.orig_address, &encoded.machine_code).unwrap_or_else(
+                    |err| {
+                        eprintln!("error: failed to write to stdout: {err}");
+                        std::process::exit(1);
+                    },
+                );
+            }
+            EmitFormat::Hex => {
+                use std::io::Write as _;
+                let hex = intel_hex(encoded.orig_address, &encoded.machine_code);
+                std::io::stdout()
+                    .write_all(hex.as_bytes())
+                    .unwrap_or_else(|err| {
+                        eprintln!("error: failed to write to stdout: {err}");
+                        std::process::exit(1);
+                    });
+            }
+        }
     } else {
-        write_obj_file(&output_path, encoded.orig_address, &encoded.machine_code).unwrap_or_else(
-            |err| {
-                eprintln!("error: failed to write '{}': {err}", output_path);
-                std::process::exit(1);
-            },
-        );
+        match args.emit {
+            EmitFormat::Obj => {
+                write_obj_file(&output_path, encoded.orig_address, &encoded.machine_code)
+                    .unwrap_or_else(|err| {
+                        eprintln!("error: failed to write '{}': {err}", output_path);
+                        std::process::exit(1);
+                    });
+            }
+            EmitFormat::Hex => {
+                let hex = intel_hex(encoded.orig_address, &encoded.machine_code);
+                fs::write(&output_path, hex).unwrap_or_else(|err| {
+                    eprintln!("error: failed to write '{}': {err}", output_path);
+                    std::process::exit(1);
+                });
+            }
+        }
     }
 
     // ── Write listing file ────────────────────────────────────────────────────
@@ -269,6 +350,16 @@ fn main() {
         let lst = listing::generate(&source, &first, &encoded, &display_name);
         fs::write(lst_path, &lst).unwrap_or_else(|err| {
             eprintln!("error: failed to write listing '{}': {err}", lst_path);
+            std::process::exit(1);
+        });
+    }
+
+    // ── Write symbol table file ───────────────────────────────────────────────
+
+    if let Some(ref sym_path) = args.symbols {
+        let sym = listing::generate_sym_file(&first.symbol_table, &display_name);
+        fs::write(sym_path, &sym).unwrap_or_else(|err| {
+            eprintln!("error: failed to write symbols '{}': {err}", sym_path);
             std::process::exit(1);
         });
     }
@@ -306,7 +397,18 @@ fn main() {
     }
 
     if let Some(ref lst_path) = args.listing {
-        eprintln!("listing written to '{lst_path}'");
+        eprintln!("listing  → '{lst_path}'");
+    }
+    if let Some(ref sym_path) = args.symbols {
+        eprintln!(
+            "symbols  → '{sym_path}'  [{} label{}]",
+            first.symbol_table.len(),
+            if first.symbol_table.len() == 1 {
+                ""
+            } else {
+                "s"
+            }
+        );
     }
 }
 
@@ -321,22 +423,26 @@ fn print_help() {
     println!();
     println!("ARGS:");
     println!("  <input.asm>   Path to the LC-3 assembly source file");
-    println!("  -             Read source from stdin; write .obj to stdout");
+    println!("  -             Read source from stdin; write output to stdout");
     println!();
     println!("OPTIONS:");
     println!("  -o, --output <file>    Write machine code to <file> (default: <input>.obj)");
-    println!("  -l, --listing <file>   Write a human-readable listing to <file>");
+    println!("  -l, --listing <file>   Write a human-readable listing (includes symbol table)");
+    println!("  -s, --symbols <file>   Write the symbol table to <file>");
+    println!("      --emit <format>    Output format: obj (default) or hex (Intel HEX)");
     println!("      --check            Validate only; do not write any output files");
     println!("      --no-color         Disable ANSI colour in diagnostics");
     println!("  -h, --help             Print this help message");
     println!("  -V, --version          Print version information");
     println!();
     println!("EXAMPLES:");
-    println!("  lc3-assembler program.asm                   # Creates program.obj");
-    println!("  lc3-assembler program.asm -o out.obj        # Explicit output path");
-    println!("  lc3-assembler program.asm -l program.lst    # Also write listing file");
-    println!("  lc3-assembler --check program.asm           # Validate without writing");
-    println!("  lc3-assembler - < program.asm > program.obj # stdin → stdout");
+    println!("  lc3-assembler program.asm                      # Creates program.obj");
+    println!("  lc3-assembler program.asm -o out.obj           # Explicit output path");
+    println!("  lc3-assembler program.asm -l prog.lst          # Listing with symbol table");
+    println!("  lc3-assembler program.asm -s prog.sym          # Symbol table only");
+    println!("  lc3-assembler program.asm --emit hex           # Intel HEX output");
+    println!("  lc3-assembler --check program.asm              # Validate without writing");
+    println!("  lc3-assembler - < program.asm > program.obj    # stdin → stdout");
 }
 
 // ── File I/O helpers ──────────────────────────────────────────────────────────
@@ -360,4 +466,50 @@ fn write_obj_stdout(orig: u16, code: &[u16]) -> io::Result<()> {
         out.write_all(&word.to_be_bytes())?;
     }
     out.flush()
+}
+
+/// Generate an Intel HEX representation of the assembled program.
+///
+/// Each data record holds up to 16 bytes (8 words).  The origin address is the
+/// byte address of the first word (word_addr * 2).  All records use the standard
+/// `:LLAAAATT…CC` format where CC is the two's-complement checksum byte.
+fn intel_hex(orig: u16, code: &[u16]) -> String {
+    // Byte address of the first word (LC-3 word addresses → byte addresses × 2).
+    let byte_origin = (orig as u32) * 2;
+
+    // Flatten 16-bit words into big-endian bytes.
+    let bytes: Vec<u8> = code
+        .iter()
+        .flat_map(|&w| [((w >> 8) & 0xFF) as u8, (w & 0xFF) as u8])
+        .collect();
+
+    let mut out = String::new();
+    const CHUNK: usize = 16; // bytes per data record
+
+    for (chunk_idx, chunk) in bytes.chunks(CHUNK).enumerate() {
+        let addr = byte_origin + (chunk_idx * CHUNK) as u32;
+        // Intel HEX only supports 16-bit addresses in the basic format.
+        // Extended records would be needed above 0xFFFF bytes (0x7FFF words).
+        let addr16 = addr as u16;
+        let byte_count = chunk.len() as u8;
+
+        // Checksum = two's complement of (byte_count + addr_hi + addr_lo + 0x00 + data…)
+        let mut sum: u8 = byte_count
+            .wrapping_add((addr16 >> 8) as u8)
+            .wrapping_add((addr16 & 0xFF) as u8);
+        for &b in chunk {
+            sum = sum.wrapping_add(b);
+        }
+        let checksum = (!sum).wrapping_add(1);
+
+        out.push_str(&format!(":{:02X}{:04X}00", byte_count, addr16));
+        for &b in chunk {
+            out.push_str(&format!("{:02X}", b));
+        }
+        out.push_str(&format!("{:02X}\n", checksum));
+    }
+
+    // End-of-file record
+    out.push_str(":00000001FF\n");
+    out
 }

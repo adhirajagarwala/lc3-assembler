@@ -49,4 +49,18 @@ impl SymbolTable {
     pub fn iter(&self) -> impl Iterator<Item = (&str, u16)> {
         self.entries.iter().map(|(l, a)| (l.as_str(), *a))
     }
+
+    /// Return entries sorted alphabetically by label name.
+    pub fn sorted_by_name(&self) -> Vec<(&str, u16)> {
+        let mut v: Vec<(&str, u16)> = self.iter().collect();
+        v.sort_by(|a, b| a.0.cmp(b.0));
+        v
+    }
+
+    /// Return entries sorted by address (ascending).
+    pub fn sorted_by_address(&self) -> Vec<(&str, u16)> {
+        let mut v: Vec<(&str, u16)> = self.iter().collect();
+        v.sort_by_key(|(_, addr)| *addr);
+        v
+    }
 }

@@ -1,3 +1,7 @@
+[workspace]
+members = ["simulator"]
+resolver = "2"
+
 [package]
 name = "lc3-assembler"
 version = "1.0.0"

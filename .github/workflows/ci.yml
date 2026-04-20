@@ -30,10 +30,10 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Check formatting
-        run: cargo fmt -- --check
+        run: cargo fmt --all -- --check
 
       - name: Run Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
   # ===========================================================================
   # Test Suite (Multiple Platforms)
@@ -67,13 +67,13 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build project
-        run: cargo build --verbose
+        run: cargo build --workspace --verbose
 
       - name: Run tests
-        run: cargo test --verbose
+        run: cargo test --workspace --verbose
 
       - name: Run tests (release mode)
-        run: cargo test --release --verbose
+        run: cargo test --workspace --release --verbose
 
       - name: Run doc tests
         run: cargo test --doc --verbose
@@ -178,8 +178,8 @@ jobs:
       - name: Remove lock file (v4 → regenerate as v3 with MSRV Cargo)
         run: rm -f Cargo.lock
 
-      - name: Build with MSRV
-        run: cargo build --verbose
+      - name: Build with MSRV (assembler only — simulator has higher MSRV via ratatui)
+        run: cargo build --verbose -p lc3-assembler
 
       - name: Test with MSRV
-        run: cargo test --verbose
+        run: cargo test --verbose -p lc3-assembler

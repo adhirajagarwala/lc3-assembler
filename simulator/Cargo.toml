@@ -1,0 +1,15 @@
+[package]
+name = "lc3-sim"
+version = "0.1.0"
+edition = "2021"
+description = "TUI debugger and simulator for the LC-3 educational computer"
+license = "MIT"
+
+[[bin]]
+name = "lc3-sim"
+path = "src/main.rs"
+
+[dependencies]
+lc3-assembler = { path = ".." }
+ratatui = "0.28"
+crossterm = "0.28"
